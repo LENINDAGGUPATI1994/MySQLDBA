@@ -61,3 +61,41 @@ INNER JOIN
     sys.columns c ON ic.object_id = c.object_id AND ic.column_id = c.column_id
 ORDER BY 
     t.name, i.name;
+
+--- To Find out Record entry Information for all the tables in SQL DB
+DECLARE @TableName NVARCHAR(128), @ColumnName NVARCHAR(128), @SQL NVARCHAR(MAX) = '';
+
+-- Cursor to loop through all tables with datetime columns
+DECLARE cur CURSOR FOR
+SELECT t.name AS TableName, c.name AS ColumnName
+FROM sys.tables t
+JOIN sys.columns c ON t.object_id = c.object_id
+JOIN sys.types ty ON c.user_type_id = ty.user_type_id
+WHERE ty.name IN ('date');
+
+OPEN cur;
+FETCH NEXT FROM cur INTO @TableName, @ColumnName;
+
+WHILE @@FETCH_STATUS = 0
+BEGIN
+    -- Yearly count
+    SET @SQL += '
+    SELECT ''' + @TableName + ''' AS TableName, YEAR([' + @ColumnName + ']) AS [Year], COUNT(1) AS RecordCount
+    FROM [' + @TableName + ']
+    WHERE [' + @ColumnName + '] BETWEEN ''2000-01-01'' AND ''2025-7-20''
+    GROUP BY YEAR([' + @ColumnName + '])
+    ORDER BY YEAR([' + @ColumnName + ']);'
+
+    FETCH NEXT FROM cur INTO @TableName, @ColumnName;
+END
+
+CLOSE cur;
+DEALLOCATE cur;
+
+-- Execute the generated SQL
+EXEC sp_executesql @SQL;
+
+
+
+SELECT MIN(YEAR(LastStay)) AS RecordStartYear
+FROM ods_et_profiles;
