@@ -87,16 +87,7 @@ INNER JOIN msdb.dbo.backupmediafamily m ON s.media_set_id = m.media_set_id
 WHERE s.database_name = DB_NAME() -- Remove this line for all the database
 ORDER BY backup_start_date DESC, backup_finish_date
 GO
- 
- 
-------------------------------------------------
- 
-For linked server check the Report-
-Overnight Failed servres
- 
-http://dcesqlrptprod01/Reports/report/IT/Report%20Server%20Monitor/Overnight%20Failed%20Servers
 
-http://dcesqlrptprod01/reports/browse/
 
 
 To check log space
