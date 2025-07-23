@@ -1,0 +1,22 @@
+--- Tables_PK_FK_UIX information for Specific table
+
+SELECT 
+    t.name AS TableName,
+    i.name AS IndexName,
+    i.type_desc AS IndexType,
+    c.name AS ColumnName,
+    ic.key_ordinal AS ColumnOrder,
+    i.is_primary_key AS IsPrimaryKey,
+    i.is_unique AS IsUnique
+FROM 
+    sys.tables AS t
+INNER JOIN 
+    sys.indexes AS i ON t.object_id = i.object_id
+INNER JOIN 
+    sys.index_columns AS ic ON i.object_id = ic.object_id AND i.index_id = ic.index_id
+INNER JOIN 
+    sys.columns AS c ON ic.object_id = c.object_id AND ic.column_id = c.column_id
+WHERE 
+    t.name = 'load_opms_ftj_aiprst'
+ORDER BY 
+    i.name, ic.key_ordinal;
