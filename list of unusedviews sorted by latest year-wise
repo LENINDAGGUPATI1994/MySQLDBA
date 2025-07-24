@@ -1,0 +1,14 @@
+
+
+SELECT 
+    v.name AS ViewName,
+    s.name AS SchemaName,
+    v.create_date,
+    v.modify_date,
+    YEAR(v.modify_date) AS ModifiedYear
+FROM 
+    sys.views v
+JOIN 
+    sys.schemas s ON v.schema_id = s.schema_id
+ORDER BY 
+    YEAR(v.modify_date) DESC, v.modify_date DESC;
