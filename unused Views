@@ -1,0 +1,27 @@
+
+--- List of unused Views
+
+SELECT
+    v.name AS ViewName,
+    s.name AS SchemaName,
+    v.create_date,
+    v.modify_date,
+    MAX(qs.last_execution_time) AS LastExecutionTime -- Last time a query using the view was executed
+FROM
+    sys.views v
+JOIN
+    sys.schemas s ON v.schema_id = s.schema_id
+LEFT JOIN
+    sys.dm_exec_query_stats qs -- Query stats DMV (contains last_execution_time)
+ON 1 = 1 -- Dummy join condition to allow cross apply
+CROSS APPLY
+    sys.dm_exec_sql_text(qs.sql_handle) AS st -- Function to get SQL text from sql_handle
+WHERE
+    st.dbid = DB_ID() -- Filter for the current database using dbid from sql_text
+    AND st.text LIKE '%' + QUOTENAME(s.name) + '.' + QUOTENAME(v.name) + '%' -- More precise matching for "Schema.ViewName"
+GROUP BY
+    v.name, s.name, v.create_date, v.modify_date
+ORDER BY
+    LastExecutionTime DESC,
+	create_date DESC,
+    v.modify_date DESC;
