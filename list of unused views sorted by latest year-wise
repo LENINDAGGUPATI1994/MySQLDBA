@@ -1,4 +1,4 @@
-
+--- Find list of unused views sorted by latest year-wise
 
 SELECT 
     v.name AS ViewName,
