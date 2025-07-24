@@ -1,0 +1,22 @@
+
+--- To find out Unused SPs information 
+SELECT
+    s.name AS SchemaName,
+    p.name AS StoredProcedureName,
+    p.create_date AS CreatedDate,
+    p.modify_date AS LastModifiedDate,
+    ps.last_execution_time AS LastExecutionDateTime -- Last time the SP was executed (since last restart/cache clear)
+FROM
+    sys.procedures p
+JOIN
+    sys.schemas s ON p.schema_id = s.schema_id
+LEFT JOIN
+    sys.dm_exec_procedure_stats ps ON p.object_id = ps.object_id AND ps.database_id = DB_ID() -- Filter for current DB
+WHERE
+    p.is_ms_shipped = 0 -- Exclude system stored procedures
+ORDER BY
+	CreatedDate DESC,
+	LastModifiedDate DESC,
+    ps.last_execution_time DESC;
+	
+	
