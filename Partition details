@@ -1,0 +1,23 @@
+-- Partition details including partitioning column, function, and scheme
+SELECT 
+    sch.name AS SchemaName,
+    t.name AS TableName,
+    i.name AS IndexName,
+    i.type_desc AS IndexType,
+    p.partition_number,
+    ps.used_page_count * 8 AS UsedSpaceKB,
+    ps.reserved_page_count * 8 AS ReservedSpaceKB,
+    pf.name AS PartitionFunction,
+    psch.name AS PartitionScheme,
+    c.name AS PartitionColumn
+FROM sys.tables AS t
+JOIN sys.schemas AS sch ON t.schema_id = sch.schema_id
+JOIN sys.indexes AS i ON t.object_id = i.object_id
+JOIN sys.partitions AS p ON i.object_id = p.object_id AND i.index_id = p.index_id
+JOIN sys.dm_db_partition_stats AS ps ON p.object_id = ps.object_id AND p.partition_number = ps.partition_number
+LEFT JOIN sys.index_columns AS ic ON i.object_id = ic.object_id AND i.index_id = ic.index_id AND ic.partition_ordinal = 1
+LEFT JOIN sys.columns AS c ON ic.object_id = c.object_id AND ic.column_id = c.column_id
+LEFT JOIN sys.partition_schemes AS psch ON i.data_space_id = psch.data_space_id
+LEFT JOIN sys.partition_functions AS pf ON psch.function_id = pf.function_id
+WHERE i.index_id <= 1 -- 0 = heap, 1 = clustered index
+ORDER BY sch.name, t.name, p.partition_number;
