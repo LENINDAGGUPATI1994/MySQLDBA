@@ -1,0 +1,42 @@
+
+--- To find out Unused Indexes information
+SELECT 
+    OBJECT_NAME(i.object_id) AS TableName,
+    i.name AS IndexName,
+    i.index_id,
+    i.type_desc AS IndexType,
+    i.is_primary_key,
+    i.is_unique,
+    i.is_disabled,
+    s.user_seeks,
+    s.user_scans,
+    s.user_lookups,
+    s.user_updates,
+    s.last_user_seek,
+    s.last_user_scan,
+    s.last_user_lookup,
+    s.last_user_update,
+    GETDATE() AS LastExecutionDate,
+    CASE 
+        WHEN s.user_seeks = 0 AND s.user_scans = 0 AND s.user_lookups = 0 THEN 'Unused'
+        ELSE 'Used'
+    END AS ReadActivityStatus,
+    CASE 
+        WHEN s.user_seeks = 0 AND s.user_scans = 0 AND s.user_lookups = 0 THEN 'Index is not used since last restart'
+        ELSE 'Index is being used'
+    END AS IndexUsageSummary
+FROM 
+    sys.indexes i
+LEFT JOIN 
+    sys.dm_db_index_usage_stats s 
+    ON i.object_id = s.object_id AND i.index_id = s.index_id 
+    AND s.database_id = DB_ID()
+WHERE 
+    i.type_desc <> 'HEAP' -- Exclude heap (no clustered index)
+    AND i.is_primary_key = 0 -- Optional: exclude primary keys
+    AND i.is_unique = 0 -- Optional: exclude unique indexes
+    AND (s.user_seeks IS NULL OR s.user_seeks = 0)
+    AND (s.user_scans IS NULL OR s.user_scans = 0)
+    AND (s.user_lookups IS NULL OR s.user_lookups = 0)
+ORDER BY 
+    OBJECT_NAME(i.object_id), i.name;
