@@ -1,0 +1,37 @@
+--- To Find out the unused tables information 
+	SELECT 
+    t.name AS TableName,
+    s.name AS SchemaName,
+    t.create_date AS TableCreateDate,
+    t.modify_date AS TableSchemaLastModifiedDate,
+    ps.row_count AS TotalRowCount,
+    MAX(ius.last_user_seek) AS LastUserSeek, -- Last time a seek was performed
+    MAX(ius.last_user_scan) AS LastUserScan, -- Last time a scan was performed
+    MAX(ius.last_user_lookup) AS LastUserLookup, -- Last time a lookup was performed
+    MAX(ius.last_user_update) AS LastUserUpdate, -- Last time an insert, update, or delete occurred
+    MAX(CASE 
+        WHEN ius.last_user_seek IS NOT NULL THEN ius.last_user_seek
+        WHEN ius.last_user_scan IS NOT NULL THEN ius.last_user_scan
+        WHEN ius.last_user_lookup IS NOT NULL THEN ius.last_user_lookup
+        WHEN ius.last_user_update IS NOT NULL THEN ius.last_user_update
+        ELSE NULL
+    END) AS LastAccessOverall
+FROM 
+    sys.tables t
+JOIN 
+    sys.schemas s ON t.schema_id = s.schema_id
+JOIN 
+    sys.dm_db_partition_stats ps ON t.object_id = ps.object_id AND ps.index_id IN (0, 1) -- Heap or Clustered Index
+LEFT JOIN -- Use LEFT JOIN to include tables with no index usage stats
+    sys.dm_db_index_usage_stats ius ON t.object_id = ius.object_id
+WHERE 
+    t.is_ms_shipped = 0 -- Exclude system tables
+GROUP BY
+    t.name,
+    s.name,
+    t.create_date,
+    t.modify_date,
+    ps.row_count
+ORDER BY 
+    LastAccessOverall DESC, -- Order by last access date descending
+    t.create_date DESC;
