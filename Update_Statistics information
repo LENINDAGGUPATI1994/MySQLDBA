@@ -1,0 +1,22 @@
+--- Update_Statistics information 
+
+SELECT 
+    t.name AS TableName,
+    s.name AS StatisticsName,
+    s.stats_id,
+    s.auto_created,
+    s.user_created,
+    s.no_recompute,
+    s.has_filter,
+    s.filter_definition,
+    STATS_DATE(s.object_id, s.stats_id) AS LastUpdated,
+    CASE 
+        WHEN s.is_temporary = 1 THEN 'Disabled'
+        ELSE 'Enabled'
+    END AS Status
+FROM 
+    sys.stats AS s
+JOIN 
+    sys.tables AS t ON s.object_id = t.object_id
+WHERE 
+    t.name = 'ods_pms_financial_transactions';
