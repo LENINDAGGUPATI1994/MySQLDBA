@@ -1,0 +1,12 @@
+
+--- To know year wise records count on the table
+
+SELECT 
+    YEAR(UpdatedDate) AS Year,
+    COUNT(*) AS RecordCount
+FROM 
+    tbl_MessagesData
+GROUP BY 
+    YEAR(UpdatedDate)
+ORDER BY 
+    YEAR(UpdatedDate);
