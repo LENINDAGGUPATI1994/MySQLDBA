@@ -1,0 +1,18 @@
+--- To find the User information on the specific Job
+SELECT 
+    s.session_id AS SPID,
+    s.login_name,
+    s.host_name AS ServerName,
+    DB_NAME(r.database_id) AS DatabaseName,
+    j.name AS JobName,
+    r.command,
+    r.start_time,
+    r.status,
+    r.cpu_time,
+    r.total_elapsed_time,
+    r.logical_reads + r.reads AS DiskIO
+FROM msdb.dbo.sysjobs j
+JOIN msdb.dbo.sysjobactivity ja ON j.job_id = ja.job_id
+JOIN sys.dm_exec_sessions s ON ja.session_id = s.session_id
+JOIN sys.dm_exec_requests r ON s.session_id = r.session_id
+WHERE s.program_name LIKE 'SQLAgent%';
