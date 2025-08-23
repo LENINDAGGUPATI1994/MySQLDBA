@@ -1,0 +1,15 @@
+
+--- To Know Unused Tables with 0 RowCount for all the tables in Single DB
+SELECT
+    t.name AS TableName,
+    SUM(p.rows) AS RowCount
+FROM 
+    sys.tables t
+JOIN 
+    sys.partitions p ON t.object_id = p.object_id
+WHERE 
+    p.index_id IN (0, 1) -- 0 = Heap, 1 = Clustered Index
+GROUP BY 
+    t.name
+HAVING 
+    SUM(p.rows) = 0;
