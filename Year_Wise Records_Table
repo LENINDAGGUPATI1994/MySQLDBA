@@ -2,11 +2,16 @@
 --- To know year wise records count on the table
 
 SELECT 
-    YEAR(UpdatedDate) AS Year,
+    YEAR(insert_date) AS Year,
     COUNT(*) AS RecordCount
 FROM 
-    tbl_MessagesData
+    ods_pms_reservations
 GROUP BY 
-    YEAR(UpdatedDate)
+    YEAR(insert_date)
 ORDER BY 
-    YEAR(UpdatedDate);
+    YEAR(insert_date);
+
+--- To know Record Date frequency
+Select MIN (update_date) as RecordStart,
+MAX (update_date) as RecordEnd
+FROM stage_ors_membership_transactions
