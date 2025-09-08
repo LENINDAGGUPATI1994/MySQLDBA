@@ -1,0 +1,100 @@
+---Step 1: Enable `xp_cmdshell
+
+-- To allow advanced options to be changed.
+EXEC sp_configure 'show advanced options', 1;
+GO
+-- To update the currently configured value for advanced options.
+RECONFIGURE;
+GO
+-- To enable xp_cmdshell
+EXEC sp_configure 'xp_cmdshell', 1;
+GO
+-- To update the currently configured value for this feature.
+RECONFIGURE;
+GO
+
+
+---Step 2: The Correct Query to Find Unused Files from each Drives
+
+SET NOCOUNT ON;
+GO
+
+-- Create a temporary table to store a list of all files known to SQL Server
+DECLARE @UsedFiles TABLE (FilePath NVARCHAR(4000));
+
+INSERT INTO @UsedFiles (FilePath)
+SELECT physical_name
+FROM sys.master_files;
+
+-- Create a temporary table to store a list of all files found on the disk
+DECLARE @DiskFiles TABLE (FilePath NVARCHAR(4000));
+
+-- Get a list of drives to scan
+CREATE TABLE #Drives (
+    DriveLetter CHAR(1),
+    FreeSpaceMB INT
+);
+
+INSERT INTO #Drives (DriveLetter, FreeSpaceMB)
+EXEC xp_fixeddrives;
+
+DECLARE @DriveLetter CHAR(1);
+DECLARE @Cmd NVARCHAR(512);
+
+-- Iterate through each drive and find all relevant files
+DECLARE drive_cursor CURSOR FOR
+SELECT DriveLetter
+FROM #Drives;
+
+OPEN drive_cursor;
+FETCH NEXT FROM drive_cursor INTO @DriveLetter;
+
+WHILE @@FETCH_STATUS = 0
+BEGIN
+    SET @Cmd = 'dir "' + @DriveLetter + ':\*.mdf" /s /b';
+    INSERT INTO @DiskFiles (FilePath) EXEC xp_cmdshell @Cmd;
+
+    SET @Cmd = 'dir "' + @DriveLetter + ':\*.ndf" /s /b';
+    INSERT INTO @DiskFiles (FilePath) EXEC xp_cmdshell @Cmd;
+
+    SET @Cmd = 'dir "' + @DriveLetter + ':\*.ldf" /s /b';
+    INSERT INTO @DiskFiles (FilePath) EXEC xp_cmdshell @Cmd;
+
+    FETCH NEXT FROM drive_cursor INTO @DriveLetter;
+END;
+
+CLOSE drive_cursor;
+DEALLOCATE drive_cursor;
+
+-- Filter out any NULL rows from xp_cmdshell
+DELETE FROM @DiskFiles
+WHERE FilePath IS NULL;
+
+-- Compare the two lists to find files on disk that are NOT in sys.master_files
+SELECT
+    'This file is likely unused and can be reviewed for deletion.' AS Note,
+    df.FilePath
+FROM @DiskFiles AS df
+LEFT JOIN @UsedFiles AS uf ON df.FilePath = uf.FilePath
+WHERE uf.FilePath IS NULL;
+
+-- Clean up temporary tables
+DROP TABLE #Drives;
+
+-- Note: The temp tables @UsedFiles and @DiskFiles will be dropped when the script completes.
+GO
+---Step 3: Disable `xp_cmdshell` (Highly Recommended)
+
+--- To allow advanced options to be changed.
+
+EXEC sp_configure 'show advanced options', 1;
+GO
+--- To update the currently configured value for advanced options.
+RECONFIGURE;
+GO
+--- To disable xp_cmdshell
+EXEC sp_configure 'xp_cmdshell', 0;
+GO
+--- To update the currently configured value for this feature.
+RECONFIGURE;
+GO

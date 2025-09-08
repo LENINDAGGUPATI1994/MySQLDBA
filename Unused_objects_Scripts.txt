@@ -1,0 +1,153 @@
+--- To Find Out the Update Statistics Information on the tables
+SELECT 
+    t.name AS TableName,
+    s.name AS StatisticsName,
+    s.stats_id,
+    s.auto_created,
+    s.user_created,
+    s.no_recompute,
+    s.has_filter,
+    s.filter_definition,
+    STATS_DATE(s.object_id, s.stats_id) AS LastUpdated,
+    CASE 
+        WHEN s.is_temporary = 1 THEN 'Disabled'
+        ELSE 'Enabled'
+    END AS Status
+FROM 
+    sys.stats AS s
+JOIN 
+    sys.tables AS t ON s.object_id = t.object_id
+WHERE 
+    t.name = 'ods_pms_financial_transactions';
+
+	--- To Find out the unused tables information 
+	SELECT 
+    t.name AS TableName,
+    s.name AS SchemaName,
+    t.create_date AS TableCreateDate,
+    t.modify_date AS TableSchemaLastModifiedDate,
+    ps.row_count AS TotalRowCount,
+    MAX(ius.last_user_seek) AS LastUserSeek, -- Last time a seek was performed
+    MAX(ius.last_user_scan) AS LastUserScan, -- Last time a scan was performed
+    MAX(ius.last_user_lookup) AS LastUserLookup, -- Last time a lookup was performed
+    MAX(ius.last_user_update) AS LastUserUpdate, -- Last time an insert, update, or delete occurred
+    MAX(CASE 
+        WHEN ius.last_user_seek IS NOT NULL THEN ius.last_user_seek
+        WHEN ius.last_user_scan IS NOT NULL THEN ius.last_user_scan
+        WHEN ius.last_user_lookup IS NOT NULL THEN ius.last_user_lookup
+        WHEN ius.last_user_update IS NOT NULL THEN ius.last_user_update
+        ELSE NULL
+    END) AS LastAccessOverall
+FROM 
+    sys.tables t
+JOIN 
+    sys.schemas s ON t.schema_id = s.schema_id
+JOIN 
+    sys.dm_db_partition_stats ps ON t.object_id = ps.object_id AND ps.index_id IN (0, 1) -- Heap or Clustered Index
+LEFT JOIN -- Use LEFT JOIN to include tables with no index usage stats
+    sys.dm_db_index_usage_stats ius ON t.object_id = ius.object_id
+WHERE 
+    t.is_ms_shipped = 0 -- Exclude system tables
+GROUP BY
+    t.name,
+    s.name,
+    t.create_date,
+    t.modify_date,
+    ps.row_count
+ORDER BY 
+    LastAccessOverall DESC, -- Order by last access date descending
+    t.create_date DESC;
+
+	
+--- To find out Unused Indexes information
+SELECT 
+    OBJECT_NAME(i.object_id) AS TableName,
+    i.name AS IndexName,
+    i.index_id,
+    i.type_desc AS IndexType,
+    i.is_primary_key,
+    i.is_unique,
+    i.is_disabled,
+    s.user_seeks,
+    s.user_scans,
+    s.user_lookups,
+    s.user_updates,
+    s.last_user_seek,
+    s.last_user_scan,
+    s.last_user_lookup,
+    s.last_user_update,
+    GETDATE() AS LastExecutionDate,
+    CASE 
+        WHEN s.user_seeks = 0 AND s.user_scans = 0 AND s.user_lookups = 0 THEN 'Unused'
+        ELSE 'Used'
+    END AS ReadActivityStatus,
+    CASE 
+        WHEN s.user_seeks = 0 AND s.user_scans = 0 AND s.user_lookups = 0 THEN 'Index is not used since last restart'
+        ELSE 'Index is being used'
+    END AS IndexUsageSummary
+FROM 
+    sys.indexes i
+LEFT JOIN 
+    sys.dm_db_index_usage_stats s 
+    ON i.object_id = s.object_id AND i.index_id = s.index_id 
+    AND s.database_id = DB_ID()
+WHERE 
+    i.type_desc <> 'HEAP' -- Exclude heap (no clustered index)
+    AND i.is_primary_key = 0 -- Optional: exclude primary keys
+    AND i.is_unique = 0 -- Optional: exclude unique indexes
+    AND (s.user_seeks IS NULL OR s.user_seeks = 0)
+    AND (s.user_scans IS NULL OR s.user_scans = 0)
+    AND (s.user_lookups IS NULL OR s.user_lookups = 0)
+ORDER BY 
+    OBJECT_NAME(i.object_id), i.name;
+
+
+--- List of unused Views
+SELECT
+    v.name AS ViewName,
+    s.name AS SchemaName,
+    v.create_date,
+    v.modify_date,
+    MAX(qs.last_execution_time) AS LastExecutionTime -- Last time a query using the view was executed
+FROM
+    sys.views v
+JOIN
+    sys.schemas s ON v.schema_id = s.schema_id
+LEFT JOIN
+    sys.dm_exec_query_stats qs -- Query stats DMV (contains last_execution_time)
+ON 1 = 1 -- Dummy join condition to allow cross apply
+CROSS APPLY
+    sys.dm_exec_sql_text(qs.sql_handle) AS st -- Function to get SQL text from sql_handle
+WHERE
+    st.dbid = DB_ID() -- Filter for the current database using dbid from sql_text
+    AND st.text LIKE '%' + QUOTENAME(s.name) + '.' + QUOTENAME(v.name) + '%' -- More precise matching for "Schema.ViewName"
+GROUP BY
+    v.name, s.name, v.create_date, v.modify_date
+ORDER BY
+    LastExecutionTime DESC,
+	create_date DESC,
+    v.modify_date DESC;
+
+
+--- To find out Unused SPs information 
+SELECT
+    p.name AS StoredProcedureName,
+    p.create_date AS CreatedDate,
+    p.modify_date AS LastModifiedDate,
+    ps.last_execution_time AS LastExecutionDateTime -- Last time the SP was executed (since last restart/cache clear)
+FROM
+    sys.procedures p
+JOIN
+    sys.schemas s ON p.schema_id = s.schema_id
+LEFT JOIN
+    sys.dm_exec_procedure_stats ps ON p.object_id = ps.object_id AND ps.database_id = DB_ID() -- Filter for current DB
+WHERE
+    p.is_ms_shipped = 0 -- Exclude system stored procedures
+ORDER BY
+	CreatedDate DESC,
+	LastModifiedDate DESC,
+    ps.last_execution_time DESC;
+	
+	
+
+

@@ -87,10 +87,46 @@ INNER JOIN msdb.dbo.backupmediafamily m ON s.media_set_id = m.media_set_id
 WHERE s.database_name = DB_NAME() -- Remove this line for all the database
 ORDER BY backup_start_date DESC, backup_finish_date
 GO
+ 
+ 
+------------------------------------------------
+ 
+For linked server check the Report-
+Overnight Failed servres
+ 
+http://dcesqlrptprod01/Reports/report/IT/Report%20Server%20Monitor/Overnight%20Failed%20Servers
+
+http://dcesqlrptprod01/reports/browse/
 
 
-
-To check log space
-Dbcc sqlperf(logspace)
-If log space is more than 90% then take a action
+--- To Find out the SSRS Subscription failure details
+SELECT 'exec sp_start_job @job_name = '''+CAST(j.[name] AS VARCHAR(40))+'''' AS ScheduleId
+ 
+,s.LastRunTime AS LastRun, s.LastStatus AS LastStatus, c.[Name] AS JobName
+ 
+,crp_ReportsReferenceTables.dbo.StripHTML(s.[Parameters]) AS [Parameters], us.UserName AS Sub_Owner
+ 
+,s.[Description], LEFT(c.[Path],LEN(c.[Path])-LEN(c.[Name])) AS Folder
+ 
+,s.SubscriptionID, uc.UserName AS ReportModifiedBy
+ 
+FROM ReportServer.dbo.Subscriptions s JOIN ReportServer.dbo.[Catalog] c ON c.ItemID = s.Report_OID
+ 
+LEFT JOIN ReportServer.dbo.ReportSchedule rs ON rs.SubscriptionID = s.SubscriptionID
+ 
+LEFT JOIN ReportServer.dbo.Users uc ON uc.UserID = c.ModifiedByID
+ 
+LEFT JOIN ReportServer.dbo.Users us ON us.UserID = s.OwnerId
+ 
+JOIN msdb.dbo.sysjobs j ON j.[name] = CONVERT(NVARCHAR(128),rs.ScheduleId)
+ 
+--WHERE s.LastRunTime > DATEADD(DD,0,DATEDIFF(DD,0,GETDATE())) AND (s.LastStatus LIKE 'Mail Sent to%' OR s.LastStatus LIKE 'Done%')
+ 
+WHERE s.LastRunTime > CONVERT(DATE,GETDATE()-3) AND s.LastStatus NOT LIKE 'Mail Sent to%' AND s.LastStatus NOT LIKE '%0 errors%' AND s.LastStatus NOT LIKE '%file%'  --AND s.LastStatus NOT LIKE '%file share%'
+ 
+--AND s.LastStatus NOT LIKE 'Pending%'
+ 
+AND c.[Path] NOT LIKE '%Sales Automation%'
+ 
+ORDER BY CONVERT(VARCHAR(16),s.LastRunTime,120) DESC, JobName, s.LastRunTime DESC, s.LastStatus
  

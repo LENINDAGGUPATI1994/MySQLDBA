@@ -1,0 +1,34 @@
+>> MS SQL Server 2019 Patching Activity Steps for DALDCESQLPROD01 & PROD02
+
+Step 1	Take snapshot of Prod servers OS and Storage for OMNI 
+Step 2	Take Differential backup of user databases before patching start
+Step 3	Take system databases full backup before patching start
+Step 4	Start Patching activity at 8:15 PM CST
+Step 5	Reboot the server after patch
+Step 6	Validation of applied patch	
+Step 7	Cross check the Services status
+Step 8	Cross check Databases status	
+Step 9	Cross check the Jobs status	
+
+Send MS SQL Server Patch download link and details with Yugi, OMNIDBA, Jodie and Eliyas
+
+Download Link:
+https://www.catalog.update.microsoft.com/Search.aspx?q=SQL%20Server%202019
+
+Rollback Plan
+1. We will uninstall the latest installed patch 
+   (If this step fixes the issue, no need to perform the below steps)
+
+2. Restore Windows to previous state.
+
+3. Restore Drives to previous state.
+
+4. Recover Databases
+   a. Recover databases by attaching with files using sp_attach
+      OR
+   b. Restore Databases if backups are available.
+      OR
+   c. Restore Production Databases into DEV
+      i. Create missing schema objects from scripted schema files.
+         OR
+      ii. Restore schema objects from Source Control

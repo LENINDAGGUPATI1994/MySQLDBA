@@ -1,0 +1,24 @@
+NETGEAR -- Recommendations to Purge the Distribution DB to get free space in the Disk
+
+>> How Many Pub & Subscribers involved in this Replication 
+
+>> Match them by use LSN
+	Replication Monitor --- Undistributed commands
+	T-SQL Commands
+		1. Pub DBA: sp_repltrans
+				sp_repltrans
+		2. Dist DBA: To know pending commands count to be applied on the Subscriber DB 
+				sp_replmonitorsubscriptionpendingcmds 
+		   System tables in the distribution database to determine the actual commands that are yet to be sent to the subscriber DB
+				select * from distribution.dbo.MSrepl_commands
+				select * from distribution.dbo.MSrepl_transactions
+
+>> Last run of all the agents
+
+>> Check Distribution DB user access
+
+>> Check what are the jobs involved and last run of them
+
+>> Fragmentation % on the Distribution DB Tables & Rebuild these fragmented 
+
+>> Purge the DB bye use SPs year wise

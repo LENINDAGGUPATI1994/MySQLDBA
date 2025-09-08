@@ -1,0 +1,38 @@
+--- Database Growth Report
+
+SELECT * FROM [dbo].[DB_Growth] WHERE DateTime BETWEEN '02/01/2025' and '02/28/2025'
+
+--- Table Growth Report for the Individual DBs 
+ 
+WITH StartSize AS (
+   SELECT
+       DBName,
+       TableName,
+       SUM(Used_MB) AS Used_MB_Start
+   FROM [dbo].[TableSize]
+   WHERE DBName = 'rev_RevenueManagement'
+     AND CAST(DateTime AS DATE) = '2025-06-28'
+   GROUP BY DBName, TableName
+),
+EndSize AS (
+   SELECT
+       DBName,
+       TableName,
+       SUM(Used_MB) AS Used_MB_End
+   FROM [dbo].[TableSize]
+   WHERE DBName = 'rev_RevenueManagement'
+     AND CAST(DateTime AS DATE) = '2025-07-30'
+   GROUP BY DBName, TableName
+)
+ 
+SELECT
+   COALESCE(e.DBName, s.DBName) AS DBName,
+   COALESCE(e.TableName, s.TableName) AS TableName,
+   s.Used_MB_Start,
+   e.Used_MB_End,
+   ISNULL(e.Used_MB_End, 0) - ISNULL(s.Used_MB_Start, 0) AS Growth_MB
+FROM StartSize s
+FULL OUTER JOIN EndSize e
+   ON s.DBName = e.DBName AND s.TableName = e.TableName
+WHERE s.Used_MB_Start IS NOT NULL OR e.Used_MB_End IS NOT NULL
+ORDER BY Growth_MB DESC;
