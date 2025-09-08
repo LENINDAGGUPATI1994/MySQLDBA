@@ -1,0 +1,11 @@
+OMNI Credentials
+
+Cisco VPN: c300.vpn.sse.cisco.com/Omni_VPN_Vendor  
+ 
+Username: daggupati.lenin@omnihotels.com
+P/w: D@ggupatiLeni@8055
+
+ZensarVM: DALDCEZENSARSQL
+
+IPs: 10.0.96.189
+	10.0.97.219

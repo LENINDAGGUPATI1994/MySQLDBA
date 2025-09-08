@@ -1,0 +1,72 @@
+
+>> Server Name
+DALDCESQLPROD02
+
+>> Database Name
+SalesAutomation
+
+>> Table
+OMNI_FDC_BOOKING_SNAPSHOT
+
+
+USE [SalesAutomation]
+GO
+
+-- Step 1: Drops index idxcs_daily_bkg_snapshot if it exists on OMNI_FDC_BOOKING_SNAPSHOT
+
+BEGIN
+    IF (SELECT count(*) 
+        FROM sys.indexes 
+        WHERE object_id = OBJECT_ID('dbo.omni_fdc_booking_snapshot') 
+        AND name='idxcs_daily_bkg_snapshot') > 0 
+    BEGIN 
+        DROP INDEX [idxcs_daily_bkg_snapshot] ON [dbo].[omni_fdc_booking_snapshot] 
+    END 
+END 
+GO 
+
+-- Step 2: Deletes rows where as of date suggested by client is between '2019-01-01' and '2019-06-30'
+USE SalesAutomation 
+
+DELETE FROM [dbo].[OMNI_FDC_BOOKING_SNAPSHOT] 
+WHERE asofdate BETWEEN '2019-01-01' AND '2019-06-30'
+
+-- Step 3: Shrinks the log file of the SalesAutomation database to 2MB
+DBCC SHRINKFILE(2,2)
+
+
+-- Step 4: Check log file size, If it hasn’t shrunk, re-run the DBCC SHRINKFILE command until space is cleared
+DBCC SHRINKFILE(2, 2)
+
+-- Step 5: Use this command to Shrink data files and check E drive space
+DBCC SHRINKFILE(1, 2)
+DBCC SHRINKFILE(3, 2)
+
+-- Step 6: Create columnstore index if not exists on OMNI_FDC_BOOKING_SNAPSHOT so that dependant jobs don't have any issues while running
+USE [SalesAutomation]
+GO
+BEGIN
+    IF (SELECT count(*) 
+        FROM sys.indexes 
+        WHERE object_id = OBJECT_ID('dbo.omni_fdc_booking_snapshot') 
+        AND name='idxcs_daily_bkg_snapshot') = 0
+
+BEGIN
+    CREATE NONCLUSTERED COLUMNSTORE INDEX [dxcs_daily_bkg_snap] 
+    ON [dbo].[omni_fdc_booking_snapshot]
+    (
+        [asofdate],
+        [OMNI_Property_Abbreviation__c],
+        [nihrm__ArrivalDate__c],
+        [nihrm__BookingStatus__c]
+    )
+    WITH (ONLINE = ON);
+END
+END
+GO
+
+Below scenario depends on the case that how much time will be taken to delete 6 months data.
+
+Repeat process 2 to 5 for next batch of six months '2019-07-01' and '2019-12-31'
+
+Repeat for Years 2020, 2021 and 2022.

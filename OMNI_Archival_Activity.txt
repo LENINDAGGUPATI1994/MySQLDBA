@@ -1,0 +1,27 @@
+Discussion Points & Recommendations for DB Purge, Archiving...
+
+>>>	Could you please confirm if a specific date or frequency has been finalized for the data purge?
+
+>>>	Will the purged data be completely removed, or should it remain accessible in some form?
+
+>>>	What data needs to be archived before purging? Are there any specific database Objects like tables, SPs involved?
+
+>>>	We need to take a full backup for User & System DBs before initiating the purge to ensure data safety and rollback capability?
+
+>>> 	Archiving and purging will require sufficient space for:
+	MDF (Primary Data File) – stores schema and data.
+	LDF (Transaction Log File) – logs all transactions and changes.
+	Action: Assess current disk space and plan for expansion if needed.
+
+>>>	Foremost, implement this activity on the lower environment. Once the expected outcome is validated then Implement the same process on the production servers.
+
+>>>	Recommendations for Storing Archived DB Data in Azure Storage account
+	>> Create a dedicated Azure Storage Account for archived database files.
+	>> Use Azure Blob Storage to store .bak, .mdf, and .ldf files securely.
+	>> Organize blobs using containers named by environment, date, or data category.
+	>> Enable Soft Delete and Blob Versioning to protect against accidental deletion.
+	>> Use Azure Storage Lifecycle Management to automatically transition older data to cool or archive tiers to reduce costs.
+	>> Implement Azure RBAC (Role-Based Access Control) to restrict access to archived data.
+	>> Enable Storage Account Firewall and Private Endpoints for enhanced security.
+	>> Consider using Azure Backup or Azure Site Recovery for long-term retention and disaster recovery.
+	>> Monitor storage usage and performance using Azure Monitor and Log Analytics.

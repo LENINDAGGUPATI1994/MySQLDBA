@@ -1,0 +1,81 @@
+--- Find out & Fix the list of unused Stored Procedures in the SQL Server DB
+-- Short query to find unused stored procedures in SQL Server
+WITH UsedProcedures AS (
+    SELECT DISTINCT
+        OBJECT_SCHEMA_NAME(ps.object_id) AS SchemaName,
+        OBJECT_NAME(ps.object_id) AS ProcedureName,
+        ps.execution_count,
+        ps.last_execution_time,
+        ps.cached_time
+    FROM sys.dm_exec_procedure_stats ps
+    WHERE ps.database_id = DB_ID()
+)
+SELECT 
+    s.name AS SchemaName,
+    p.name AS ProcedureName,
+    p.create_date,
+    p.modify_date,
+    COALESCE(up.execution_count, 0) AS ExecutionCount,
+    up.last_execution_time,
+    CASE 
+        WHEN up.ProcedureName IS NULL THEN 'Never Executed'
+        WHEN up.execution_count = 0 THEN 'Not Executed'
+        WHEN up.last_execution_time < DATEADD(MONTH, -6, GETDATE()) THEN 'Not Used in 6+ Months'
+        WHEN up.last_execution_time < DATEADD(MONTH, -3, GETDATE()) THEN 'Not Used in 3+ Months'
+        ELSE 'Recently Used'
+    END AS UsageStatus,
+    'DROP PROCEDURE [' + s.name + '].[' + p.name + '];' AS DropStatement
+FROM sys.procedures p
+INNER JOIN sys.schemas s ON s.schema_id = p.schema_id
+LEFT JOIN UsedProcedures up ON s.name = up.SchemaName AND p.name = up.ProcedureName
+WHERE p.is_ms_shipped = 0  -- Exclude system procedures
+  AND (up.ProcedureName IS NULL OR up.execution_count = 0 OR up.last_execution_time < DATEADD(MONTH, -3, GETDATE()))
+ORDER BY 
+    CASE 
+        WHEN up.ProcedureName IS NULL THEN 1
+        WHEN up.execution_count = 0 THEN 2
+        ELSE 3
+    END,
+    up.last_execution_time ASC,
+    s.name, p.name;
+
+Drop Procedure 'UsedProcedures'
+EXEC [dbo].[uspLogError];
+ 
+-- Even shorter version (basic check)
+
+SELECT 
+    OBJECT_SCHEMA_NAME(p.object_id) AS SchemaName,
+    p.name AS ProcedureName,
+    p.create_date,
+    p.modify_date,
+    'DROP PROCEDURE [' + OBJECT_SCHEMA_NAME(p.object_id) + '].[' + p.name + '];' AS DropStatement
+FROM sys.procedures p
+WHERE p.is_ms_shipped = 0
+  AND NOT EXISTS (
+      SELECT 1 FROM sys.dm_exec_procedure_stats ps 
+      WHERE ps.object_id = p.object_id 
+        AND ps.database_id = DB_ID()
+        AND ps.execution_count > 0
+  )
+ORDER BY p.create_date;
+
+
+-- Summary statistics
+SELECT 
+    COUNT(*) AS TotalProcedures,
+    SUM(CASE WHEN up.ProcedureName IS NULL THEN 1 ELSE 0 END) AS NeverExecuted,
+    SUM(CASE WHEN up.execution_count = 0 THEN 1 ELSE 0 END) AS ZeroExecutions,
+    SUM(CASE WHEN up.last_execution_time < DATEADD(MONTH, -6, GETDATE()) THEN 1 ELSE 0 END) AS NotUsedIn6Months,
+    SUM(CASE WHEN up.last_execution_time >= DATEADD(MONTH, -1, GETDATE()) THEN 1 ELSE 0 END) AS UsedInLastMonth
+FROM sys.procedures p
+LEFT JOIN (
+    SELECT DISTINCT
+        OBJECT_SCHEMA_NAME(ps.object_id) AS SchemaName,
+        OBJECT_NAME(ps.object_id) AS ProcedureName,
+        ps.execution_count,
+        ps.last_execution_time
+    FROM sys.dm_exec_procedure_stats ps
+    WHERE ps.database_id = DB_ID()
+) up ON OBJECT_SCHEMA_NAME(p.object_id) = up.SchemaName AND p.name = up.ProcedureName
+WHERE p.is_ms_shipped = 0;
