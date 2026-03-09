@@ -1,4 +1,9 @@
 /************************************************************/
+SQL Server Transactions Per Day / Hour / Min - Article from GIGAOM
+------------------------------------------------------------------------
+https://gigaom.com/report/sql-transaction-processing-price-performance-testing/
+
+
 /******* SQL Server Transactions Per Day / Hour / Min *******/
 /******* Tested : SQL Server 2008 R2, 2012, 2014 ************/
 /******* Author : udayarumilli.com **************************/
@@ -44,4 +49,5 @@ SELECT  @Restarted_Date			AS 'Last_Restarted_On',
 FROM    sys.dm_os_performance_counters
 WHERE   counter_name = 'Transactions/sec'
         AND instance_name <> '_Total'
+
 ORDER BY cntr_value DESC;
