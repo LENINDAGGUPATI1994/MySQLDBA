@@ -1,0 +1,6 @@
+>> Create New Notepad document in the folder
+>> then enable the file extensions in the view option
+>> change the file name now as .udl
+>> Now open the OLEDB UDL file and try connect to the SQL / Oracle DBs for connectivity
+>> Specify the server name, credentials & DB name
+>> then click on the connect.
