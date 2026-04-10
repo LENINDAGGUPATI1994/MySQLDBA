@@ -1,0 +1,102 @@
+TDE Configuration Status for SQL DB:
+=================================================
+
+SELECT
+    db.name AS DatabaseName,
+    dek.encryption_state,
+    CASE dek.encryption_state
+        WHEN 0 THEN 'No database encryption key present'
+        WHEN 1 THEN 'Unencrypted'
+        WHEN 2 THEN 'Encryption in progress'
+        WHEN 3 THEN 'Encrypted'
+        WHEN 4 THEN 'Key change in progress'
+        WHEN 5 THEN 'Decryption in progress'
+        WHEN 6 THEN 'Protection change in progress'
+    END AS EncryptionStateDesc,
+    dek.percent_complete
+FROM sys.databases db
+LEFT JOIN sys.dm_database_encryption_keys dek
+    ON db.database_id = dek.database_id;
+``
+
+TDE certificate used by each database
+------------------------------------------
+SELECT
+    db.name AS DatabaseName,
+    c.name AS CertificateName,
+    c.subject,
+    c.start_date,
+    c.expiry_date
+FROM sys.databases db
+JOIN sys.dm_database_encryption_keys dek
+    ON db.database_id = dek.database_id
+JOIN sys.certificates c
+    ON dek.encryptor_thumbprint = c.thumbprint;
+
+
+Identify TDE-related certificates
+----------------------------------------
+
+SELECT
+    name AS CertificateName,
+    subject,
+    start_date,
+    expiry_date
+FROM sys.certificates
+WHERE name LIKE '%TDE%' 
+   OR subject LIKE '%TDE%';
+
+
+List all certificates in the instance
+--------------------------------------------
+
+SELECT 
+    name AS CertificateName,
+    subject,
+    start_date,
+    expiry_date,
+    pvt_key_encryption_type_desc
+FROM sys.certificates
+
+
+
+
+Databases with Dynamic Data Masking Enabled
+===============================================
+SELECT
+    name AS DatabaseName,
+    is_masked
+FROM sys.databases;
+
+
+Masked columns in the current DB
+----------------------------------
+SELECT
+    s.name AS SchemaName,
+    t.name AS TableName,
+    c.name AS ColumnName,
+    mc.masking_function
+FROM sys.masked_columns mc
+JOIN sys.columns c
+    ON mc.object_id = c.object_id
+   AND mc.column_id = c.column_id
+JOIN sys.tables t
+    ON t.object_id = c.object_id
+JOIN sys.schemas s
+    ON t.schema_id = s.schema_id
+ORDER BY SchemaName, TableName;
+
+
+-- Open the key using the certificate or password that protects it
+OPEN SYMMETRIC KEY YourSymmetricKeyName 
+DECRYPTION BY CERTIFICATE YourCertificateName;
+
+-- Use DecryptByKey to read the data and convert it back to readable text
+SELECT 
+    EncryptedColumn, 
+    CONVERT(varchar, DECRYPTBYKEY(EncryptedColumn)) AS DecryptedData
+FROM YourTableName;
+
+-- Always close the key after use
+CLOSE SYMMETRIC KEY YourSymmetricKeyName;
+

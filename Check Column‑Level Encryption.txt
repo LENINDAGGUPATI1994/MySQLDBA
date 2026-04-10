@@ -1,0 +1,62 @@
+Check Column‑Level Encryption using Always Encrypted
+=========================================================
+This is the only column‑level encryption model where SQL Server stores encryption metadata and allows reliable status checks.
+
+--- Check if any columns are encrypted (Current Database)
+SELECT
+    s.name  AS SchemaName,
+    t.name  AS TableName,
+    c.name  AS ColumnName,
+    c.encryption_type_desc,
+    c.column_encryption_key_id
+FROM sys.columns c
+JOIN sys.tables t
+    ON c.object_id = t.object_id
+JOIN sys.schemas s
+    ON t.schema_id = s.schema_id
+WHERE c.encryption_type_desc <> 'PLAINTEXT'
+ORDER BY SchemaName, TableName, ColumnName;
+
+--- If rows are returned, column‑level encryption is enabled.
+--------------------------------------------------------------
+>>> View Column Encryption Keys (CEK)
+SELECT
+    cek.column_encryption_key_id,
+    cek.name AS CEK_Name,
+    cek.algorithm_desc
+FROM sys.column_encryption_keys cek;
+
+>>> View Column Master Keys (CMK)
+SELECT
+    cmk.name AS CMK_Name,
+    cmk.key_store_provider_name,
+    cmk.key_path
+FROM sys.column_master_keys cmk;
+
+>>> Complete Always Encrypted Mapping (DBA‑Friendly Report)
+SELECT
+    s.name AS SchemaName,
+    t.name AS TableName,
+    c.name AS ColumnName,
+    c.encryption_type_desc,
+    cek.name AS ColumnEncryptionKey,
+    cmk.name AS ColumnMasterKey,
+    cmk.key_store_provider_name
+FROM sys.columns c
+JOIN sys.tables t
+    ON c.object_id = t.object_id
+JOIN sys.schemas s
+    ON t.schema_id = s.schema_id
+LEFT JOIN sys.column_encryption_keys cek
+    ON c.column_encryption_key_id = cek.column_encryption_key_id
+LEFT JOIN sys.column_master_key_definitions cmkd
+    ON cek.column_encryption_key_id = cmkd.column_encryption_key_id
+LEFT JOIN sys.column_master_keys cmk
+    ON cmkd.column_master_key_id = cmk.column_master_key_id
+WHERE c.encryption_type_desc <> 'PLAINTEXT';
+
+✅ This is ideal for security audits.
+✅ 2. Check Column Encryption using Legacy Encryption (EncryptByKey / EncryptByCert)
+⚠️ Important limitation
+SQL Server does NOT track column‑level encryption metadata for legacy encryption.
+That means:
