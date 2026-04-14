@@ -1,0 +1,27 @@
+- -dbmanager
+-- loginmanagers
+/ *** Dataabse **** /
+CREATE LOGIN Krishna WITH PASSWORD = 'Krishna@12345';
+/ *** Dataabse **** /
+CREATE USER Krishna
+from login Krishna
+
+ALTER ROLE loginmanager ADD MEMBER Krishna
+ALTER ROLE dbmanager ADD MEMBER Krishna
+
+**** /
+CREATE USER Lenin
+WITH PASSWORD = 'Lenin@12345'
+
+EXEC sp_addrolemember N'db_datareader', N'Lenin'
+EXEC sp_addrolemember N'db_owner', N'Lenin'
+EXEC sp_addrolemember N'db_datareader', N'Lenin'
+
+-- db_accessadmin, db_backupoperator, db_datareader, db_ddladmin, db_denydatareader,
+-- db_denydatawriter, db_owner, db_securityadmin
+
+Grant Select, Insert, Update On [Schema].[tablename] to Lenin
+
+CREATE USER [bob@contoso.com] FROM EXTERNAL PROVIDER;
+
+/ *** Dataabse
