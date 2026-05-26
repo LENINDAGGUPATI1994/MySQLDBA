@@ -1,0 +1,30 @@
+CREATE TRIGGER trg_Source_DML
+ON SourceTable
+AFTER INSERT, UPDATE, DELETE
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    -- Handle INSERT
+    INSERT INTO TargetTable (Id, Name, Salary)
+    SELECT I.Id, I.Name, I.Salary
+    FROM INSERTED I
+    LEFT JOIN DELETED D ON I.Id = D.Id
+    WHERE D.Id IS NULL;
+
+    -- Handle UPDATE
+    UPDATE T
+    SET 
+        T.Name = I.Name,
+        T.Salary = I.Salary
+    FROM TargetTable T
+    INNER JOIN INSERTED I ON T.Id = I.Id
+    INNER JOIN DELETED D ON I.Id = D.Id;
+
+    -- Handle DELETE
+    DELETE T
+    FROM TargetTable T
+    INNER JOIN DELETED D ON T.Id = D.Id
+    LEFT JOIN INSERTED I ON D.Id = I.Id
+    WHERE I.Id IS NULL;
+END;
