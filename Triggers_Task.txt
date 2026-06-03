@@ -1,0 +1,116 @@
+Create Database:
+-----------------------
+
+Create Database ProvenTech
+go 
+
+Use ProvenTech
+go
+
+Create a table in the Database:
+-----------------------------------
+CREATE TABLE LIMS_Emp
+(  
+    EmployeeID int Primary Key NOT NULL,
+    FirstName nvarchar(50) NOT NULL,
+    LastName nvarchar(50) NOT NULL,
+    HireDate date,    
+);
+
+CREATE TABLE INSUD_Client
+(  
+    EmployeeID int Primary Key NOT NULL,
+    FirstName nvarchar(50) NOT NULL,
+    LastName nvarchar(50) NOT NULL,
+    HireDate date,    
+);
+
+Inserting the data into created table in the Database:
+-------------------------------------------------------
+
+INSERT INTO LIMS_Emp
+VALUES 
+(1, 'Lenin','Daggupati','2026-02-21'),
+(2, 'Ravi','Kotha','2026-02-23'),
+(3, 'Srinu','Thatharaju','2026-02-24'),
+(4, 'Sunny', 'SCL', '2026-02-22'),
+(5, 'Sai', 'Kumar', '2026-02-23'),
+(6, 'Sai', 'Kumar', '2026-02-24'),
+(7, 'Velangani', 'Gade', '2026-02-28'),
+(8, 'Sujatha', 'Reddy', '2026-02-20'),
+(9, 'Swathi', 'Reddy', '2026-02-27'),
+(10, 'Atchyuth', 'Kommera', '2026-02-22'),
+(11, 'Ranjith', 'Mamidi', '2026-02-21'),
+(12, 'Daggupati', 'Lenin', '2026-02-23'),
+(13, 'Varun', 'Tirumala', '2026-02-26'),
+(14, 'Naidu', 'Balaiah', '2026-02-25'),
+(15, 'Sai', 'Pajjuri', '2026-02-23'),
+(16, 'Osman', 'Syed', '2026-02-20'),
+(17, 'Santhosh', 'Dasolu', '2026-02-20'),
+(18, 'Giridhar', 'Dasolu', '2026-02-20');
+Go
+
+Fetching the Data for table:
+-------------------------------
+Select * from LIMS_Emp
+Select * from INSUD_Client
+
+Create Triggers to Track and replicate the data changes from Source to Destination
+----------------------------------------------------------------------------------------
+CREATE TRIGGER trg_Source_DML
+ON LIMS_Emp
+AFTER INSERT, UPDATE, DELETE
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    -- Handle INSERT
+    INSERT INTO INSUD_Client(EmployeeID, FirstName, LastName, HireDate)
+    SELECT I.EmployeeID, I.FirstName, I.LastName, I.HireDate
+    FROM INSERTED I
+    LEFT JOIN DELETED D ON I.EmployeeID = D.EmployeeID
+    WHERE D.EmployeeID IS NULL;
+
+    -- Handle UPDATE
+    UPDATE T
+    SET 
+        T.FirstName = I.LastName,
+        T.LastName = I.LastName
+    FROM INSUD_Client T
+    INNER JOIN INSERTED I ON T.EmployeeID = I.EmployeeID
+    INNER JOIN DELETED D ON I.EmployeeID = D.EmployeeID;
+
+    -- Handle DELETE
+    DELETE T
+    FROM INSUD_Client T
+    INNER JOIN DELETED D ON T.EmployeeID = D.EmployeeID
+    LEFT JOIN INSERTED I ON D.EmployeeID = I.EmployeeID
+    WHERE I.EmployeeID IS NULL;
+END;
+
+
+ALTER TABLE LIMS_Emp
+ADD CONSTRAINT PK_LIMS_Emp PRIMARY KEY (EmployeeID);
+
+ALTER TABLE INSUD_Client
+ADD CONSTRAINT PK_INSUD_Client PRIMARY KEY (EmployeeID);
+
+Select * from LIMS_Emp
+Select * from INSUD_Client
+Select * from CHEMO_IND
+
+DML Operations:
+---------------------
+INSERT INTO LIMS_Emp
+VALUES 
+(1, 'Lenin','Daggupati','2026-02-21');
+
+Delete from LIMS_Emp
+Where EmployeeID='1'
+
+UPDATE LIMS_Emp
+SET FirstName = 'Leni',
+WHERE EmployeeID = '1';
+
+
+
