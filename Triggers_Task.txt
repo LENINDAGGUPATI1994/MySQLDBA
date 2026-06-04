@@ -1,13 +1,13 @@
-Create Database:
+--Create Database:
 -----------------------
 
 Create Database ProvenTech
 go 
 
-Use ProvenTech
+Use ProvenTechDBs
 go
 
-Create a table in the Database:
+--Create a table in the Database:
 -----------------------------------
 CREATE TABLE LIMS_Emp
 (  
@@ -35,7 +35,7 @@ VALUES
 (3, 'Srinu','Thatharaju','2026-02-24'),
 (4, 'Sunny', 'SCL', '2026-02-22'),
 (5, 'Sai', 'Kumar', '2026-02-23'),
-(6, 'Sai', 'Kumar', '2026-02-24'),
+(6, 'Sai', 'Kumar', '2026-02-24');
 (7, 'Velangani', 'Gade', '2026-02-28'),
 (8, 'Sujatha', 'Reddy', '2026-02-20'),
 (9, 'Swathi', 'Reddy', '2026-02-27'),
@@ -74,7 +74,7 @@ BEGIN
     -- Handle UPDATE
     UPDATE T
     SET 
-        T.FirstName = I.LastName,
+        T.FirstName = I.FirstName,
         T.LastName = I.LastName
     FROM INSUD_Client T
     INNER JOIN INSERTED I ON T.EmployeeID = I.EmployeeID
@@ -88,7 +88,7 @@ BEGIN
     WHERE I.EmployeeID IS NULL;
 END;
 
-
+Drop Trigger trg_Source_DML
 ALTER TABLE LIMS_Emp
 ADD CONSTRAINT PK_LIMS_Emp PRIMARY KEY (EmployeeID);
 
@@ -106,11 +106,14 @@ VALUES
 (1, 'Lenin','Daggupati','2026-02-21');
 
 Delete from LIMS_Emp
-Where EmployeeID='1'
+Where EmployeeID='3'
 
 UPDATE LIMS_Emp
-SET FirstName = 'Leni',
+SET FirstName = 'Leni'
 WHERE EmployeeID = '1';
+
+Select * from LIMS_Emp
+Select * from INSUD_Client
 
 -----------------------------------------------------------------
 -- First, verify your table structure
@@ -174,3 +177,6 @@ GO
 -- Verify the count
 SELECT COUNT(*) AS TotalRecords FROM LIMS_Emp;
 
+
+Truncate table LIMS_emp
+Truncate table INSUD_Client
