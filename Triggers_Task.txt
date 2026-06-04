@@ -57,30 +57,31 @@ Select * from INSUD_Client
 
 Create Triggers to Track and replicate the data changes from Source to Destination
 ----------------------------------------------------------------------------------------
-CREATE TRIGGER trg_Source_DML
+CREATE TRIGGER [trg_Source_DML]
 ON LIMS_Emp
 AFTER INSERT, UPDATE, DELETE
 AS
 BEGIN
     SET NOCOUNT ON;
 
-    -- Handle INSERT
+    -- Handle INSERT (new records)
     INSERT INTO INSUD_Client(EmployeeID, FirstName, LastName, HireDate)
     SELECT I.EmployeeID, I.FirstName, I.LastName, I.HireDate
     FROM INSERTED I
     LEFT JOIN DELETED D ON I.EmployeeID = D.EmployeeID
     WHERE D.EmployeeID IS NULL;
 
-    -- Handle UPDATE
+    -- Handle UPDATE (existing records)
     UPDATE T
     SET 
         T.FirstName = I.FirstName,
-        T.LastName = I.LastName
+        T.LastName = I.LastName,
+        T.HireDate = I.HireDate
     FROM INSUD_Client T
     INNER JOIN INSERTED I ON T.EmployeeID = I.EmployeeID
     INNER JOIN DELETED D ON I.EmployeeID = D.EmployeeID;
 
-    -- Handle DELETE
+    -- Handle DELETE (remove records)
     DELETE T
     FROM INSUD_Client T
     INNER JOIN DELETED D ON T.EmployeeID = D.EmployeeID
