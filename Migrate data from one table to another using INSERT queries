@@ -1,0 +1,273 @@
+1. Basic INSERT SELECT (Same Database)
+sql
+-- Insert all data from source to destination table
+INSERT INTO [DestinationTable] 
+SELECT * FROM [SourceTable];
+
+-- Insert specific columns
+INSERT INTO [DestinationTable] (Column1, Column2, Column3)
+SELECT Column1, Column2, Column3 FROM [SourceTable];
+
+-- Insert with WHERE clause filter
+INSERT INTO [DestinationTable] 
+SELECT * FROM [SourceTable] 
+WHERE Status = 'Active';
+
+-- Insert top N records
+INSERT INTO [DestinationTable] 
+SELECT TOP 1000 * FROM [SourceTable] 
+ORDER BY CreatedDate DESC;
+
+2. INSERT SELECT with Different Column Mapping sql
+-- When column names are different
+INSERT INTO [DestinationTable] (DestCol1, DestCol2, DestCol3)
+SELECT 
+    SourceColA AS DestCol1,
+    SourceColB AS DestCol2,
+    SourceColC AS DestCol3
+FROM [SourceTable];
+
+-- With data transformation
+INSERT INTO [DestinationTable] (Name, Amount, CreatedDate)
+SELECT 
+    UPPER(FirstName + ' ' + LastName) AS Name,
+    ISNULL(Amount, 0) * 1.1 AS Amount,
+    GETDATE() AS CreatedDate
+FROM [SourceTable];
+
+3. INSERT with JOIN (Multiple Tables)
+sql
+-- Insert data from multiple tables
+INSERT INTO [DestinationTable] (OrderID, CustomerName, ProductName, TotalAmount)
+SELECT 
+    o.OrderID,
+    c.CustomerName,
+    p.ProductName,
+    od.Quantity * p.Price AS TotalAmount
+FROM Orders o
+INNER JOIN Customers c ON o.CustomerID = c.CustomerID
+INNER JOIN OrderDetails od ON o.OrderID = od.OrderID
+INNER JOIN Products p ON od.ProductID = p.ProductID;
+
+4. INSERT with EXISTS (Avoid Duplicates)sql
+-- Insert only records that don't exist in destination
+INSERT INTO [DestinationTable] (ID, Name, Value)
+SELECT s.ID, s.Name, s.Value
+FROM [SourceTable] s
+WHERE NOT EXISTS (
+    SELECT 1 FROM [DestinationTable] d 
+    WHERE d.ID = s.ID
+);
+
+-- Alternative using LEFT JOIN
+INSERT INTO [DestinationTable] (ID, Name, Value)
+SELECT s.ID, s.Name, s.Value
+FROM [SourceTable] s
+LEFT JOIN [DestinationTable] d ON s.ID = d.ID
+WHERE d.ID IS NULL;
+
+5. INSERT with Conditional Logic (CASE)
+sql
+INSERT INTO [DestinationTable] (Status, Priority, Category)
+SELECT 
+    CASE 
+        WHEN Amount > 10000 THEN 'High'
+        WHEN Amount > 5000 THEN 'Medium'
+        ELSE 'Low'
+    END AS Status,
+    CASE 
+        WHEN DueDate < GETDATE() THEN 1
+        ELSE 0
+    END AS Priority,
+    COALESCE(Category, 'Uncategorized') AS Category
+FROM [SourceTable];
+
+6. Batch Insert for Large Tables
+sql
+-- Batch insert in chunks to avoid transaction log overflow
+DECLARE @BatchSize INT = 10000;
+DECLARE @Offset INT = 0;
+DECLARE @RowCount INT = 1;
+
+WHILE @RowCount > 0
+BEGIN
+    INSERT INTO [DestinationTable] (Column1, Column2, Column3)
+    SELECT Column1, Column2, Column3
+    FROM [SourceTable]
+    ORDER BY ID
+    OFFSET @Offset ROWS
+    FETCH NEXT @BatchSize ROWS ONLY;
+    
+    SET @RowCount = @@ROWCOUNT;
+    SET @Offset = @Offset + @BatchSize;
+    
+    -- Optional: Commit checkpoint for large migrations
+    IF @RowCount = @BatchSize
+        CHECKPOINT;
+END;
+
+7. INSERT with Identity Column Handling
+sql
+-- Preserve identity values (if destination allows)
+SET IDENTITY_INSERT [DestinationTable] ON;
+
+INSERT INTO [DestinationTable] (ID, Name, Value)
+SELECT ID, Name, Value FROM [SourceTable];
+
+SET IDENTITY_INSERT [DestinationTable] OFF;
+
+-- Let destination generate new identity values
+INSERT INTO [DestinationTable] (Name, Value)
+SELECT Name, Value FROM [SourceTable];
+
+8. Cross-Database Migration sql
+-- Migrate data from another database on same server
+INSERT INTO [CurrentDB].[dbo].[DestinationTable]
+SELECT * FROM [SourceDatabase].[dbo].[SourceTable];
+
+-- With specific database qualifiers
+INSERT INTO [DB_Production].[dbo].[Customers]
+SELECT 
+    CustomerID,
+    CustomerName,
+    Email,
+    CreatedDate
+FROM [DB_Staging].[dbo].[TempCustomers]
+WHERE IsValid = 1;
+
+9. Linked Server Migration (Different Servers)
+sql
+-- Insert from linked server
+INSERT INTO [LocalDB].[dbo].[DestinationTable]
+SELECT * 
+FROM [LinkedServer].[RemoteDB].[dbo].[SourceTable];
+
+-- With OPENQUERY for better performance
+INSERT INTO [LocalDB].[dbo].[DestinationTable]
+SELECT * 
+FROM OPENQUERY([LinkedServer], '
+    SELECT Column1, Column2, Column3 
+    FROM [RemoteDB].[dbo].[SourceTable]
+    WHERE Status = ''Active''
+');
+
+10. INSERT with Error Handling
+sql
+-- Transaction with error handling
+BEGIN TRY
+    BEGIN TRANSACTION;
+    
+    INSERT INTO [DestinationTable] (ID, Name, Amount)
+    SELECT ID, Name, Amount
+    FROM [SourceTable]
+    WHERE Amount > 0;
+    
+    COMMIT TRANSACTION;
+    PRINT 'Migration completed successfully';
+END TRY
+BEGIN CATCH
+    ROLLBACK TRANSACTION;
+    PRINT 'Error occurred: ' + ERROR_MESSAGE();
+    PRINT 'Error Number: ' + CAST(ERROR_NUMBER() AS VARCHAR);
+END CATCH;
+
+11. Insert with Output Clause (Track Inserted Records)
+sql
+-- Capture inserted records
+DECLARE @InsertedRecords TABLE (
+    NewID INT,
+    OldID INT,
+    Name NVARCHAR(100)
+);
+
+INSERT INTO [DestinationTable] (ID, Name, Value)
+OUTPUT inserted.ID, source.ID, inserted.Name
+INTO @InsertedRecords (NewID, OldID, Name)
+SELECT s.ID, s.Name, s.Value
+FROM [SourceTable] s
+WHERE s.Status = 'Active';
+
+-- View what was inserted
+SELECT * FROM @InsertedRecords;
+
+12. Specific for Your Database Growth Tables
+sql
+-- Example: Migrate old data to archive table
+INSERT INTO [dbo].[DB_Growth_Archive] ([DateTime], [DBName], [Size_MB], [Used_MB], [Free_MB])
+SELECT [DateTime], [DBName], [Size_MB], [Used_MB], [Free_MB]
+FROM [dbo].[DB_Growth]
+WHERE [DateTime] < DATEADD(year, -1, GETDATE());
+
+-- Migrate monthly summary to history
+INSERT INTO [dbo].[MonthlyGrowthSummary_History] 
+SELECT * FROM [dbo].[MonthlyGrowthSummary]
+WHERE Report_Month < DATEADD(month, -6, GETDATE());
+
+-- Migrate top growing tables to reporting table
+INSERT INTO [dbo].[TopGrowingTables_Report] (ReportDate, DBName, TableName, Growth_MB)
+SELECT 
+    GETDATE() AS ReportDate,
+    DBName,
+    TableName,
+    Growth_MB
+FROM [dbo].[TableSize]
+WHERE CAST(DateTime AS DATE) = CAST(GETDATE() AS DATE)
+    AND Growth_MB > 1000; -- More than 1GB growth
+
+13. Performance Optimized Migration sql
+-- For very large tables, use with TABLOCK hint
+INSERT INTO [DestinationTable] WITH (TABLOCK) (Column1, Column2)
+SELECT Column1, Column2
+FROM [SourceTable]
+WHERE Condition = 'Value';
+
+-- Minimize logging (Simple recovery model recommended)
+ALTER DATABASE [YourDatabase] SET RECOVERY SIMPLE;
+
+INSERT INTO [DestinationTable] (Column1, Column2)
+SELECT Column1, Column2 FROM [SourceTable];
+
+ALTER DATABASE [YourDatabase] SET RECOVERY FULL;
+
+-- Use batch processing with transaction log management
+DECLARE @BatchSize INT = 50000;
+WHILE 1 = 1
+BEGIN
+    INSERT INTO [DestinationTable] (Column1, Column2)
+    SELECT TOP (@BatchSize) Column1, Column2
+    FROM [SourceTable]
+    WHERE Migrated = 0;
+    
+    IF @@ROWCOUNT < @BatchSize BREAK;
+    
+    WAITFOR DELAY '00:00:01'; -- Give other processes time
+END;
+Common Patterns for Your Use Case:
+sql
+-- 1. Daily migration from staging to production
+INSERT INTO [Production].[dbo].[DailyMetrics]
+SELECT * FROM [Staging].[dbo].[DailyMetrics]
+WHERE ProcessedDate = CAST(GETDATE() AS DATE);
+
+-- 2. Monthly aggregation migration
+INSERT INTO [Reporting].[dbo].[MonthlySummary]
+SELECT 
+    YEAR(DateTime) AS Year,
+    MONTH(DateTime) AS Month,
+    DBName,
+    SUM(Growth_MB) AS TotalGrowth_MB
+FROM [dbo].[DB_Growth]
+WHERE DateTime >= DATEADD(month, -1, GETDATE())
+GROUP BY YEAR(DateTime), MONTH(DateTime), DBName;
+
+-- 3. Clean up and migrate old data
+BEGIN TRANSACTION;
+    
+    INSERT INTO [dbo].[DB_Growth_Archive]
+    SELECT * FROM [dbo].[DB_Growth]
+    WHERE DateTime < DATEADD(month, -6, GETDATE());
+    
+    DELETE FROM [dbo].[DB_Growth]
+    WHERE DateTime < DATEADD(month, -6, GETDATE());
+    
+COMMIT TRANSACTION;
