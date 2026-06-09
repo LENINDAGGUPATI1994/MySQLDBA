@@ -49,6 +49,8 @@ CREATE TABLE [dbo].[GrowthTracking_JobHistory] (
     [ErrorMessage] NVARCHAR(MAX) NULL,
     [DatabasesProcessed] INT NULL
 );
+
+
 2. Create Stored Procedures
 sql
 -- Stored Procedure to capture database growth
@@ -346,6 +348,8 @@ BEGIN
     END
 END;
 GO
+
+
 3. Create SQL Agent Jobs
 sql
 -- Job 1: Daily Database Growth Capture (runs daily at 1:00 AM)
@@ -437,8 +441,9 @@ EXEC dbo.sp_attach_schedule
 EXEC dbo.sp_add_jobserver
     @job_name = N'Weekly Table Growth Report';
 GO
-4. Cleanup Old Data (Optional)
-sql
+
+
+4. Cleanup Old Data (Optional) sql
 -- Stored procedure to cleanup old data (keep last 90 days)
 CREATE OR ALTER PROCEDURE [dbo].[sp_CleanupOldGrowthData]
     @RetentionDays INT = 90
@@ -462,6 +467,7 @@ END;
 GO
 Usage Examples:
 sql
+
 -- Manually capture growth for all databases
 EXEC [dbo].[sp_CaptureDatabaseGrowth] @LogToHistory = 1;
 EXEC [dbo].[sp_CaptureTableGrowth] @LogToHistory = 1;
@@ -489,13 +495,51 @@ ORDER BY StartTime DESC;
 EXEC [dbo].[sp_CleanupOldGrowthData] @RetentionDays = 90;
 This setup provides:
 
-Automated daily capture of database and table growth
+--- Database Growth Report
 
-Historical tracking for trend analysis
+SELECT * FROM [dbo].[DB_Growth] WHERE DateTime BETWEEN '02/01/2025' and '02/28/2025'
 
-SQL Agent jobs for automation
+--- Table Growth Report for the Individual DBs 
+ 
+WITH StartSize AS (
+   SELECT
+       DBName,
+       TableName,
+       SUM(Used_MB) AS Used_MB_Start
+   FROM [dbo].[TableSize]
+   WHERE DBName = 'rev_RevenueManagement'
+     AND CAST(DateTime AS DATE) = '2025-06-28'
+   GROUP BY DBName, TableName
+),
+EndSize AS (
+   SELECT
+       DBName,
+       TableName,
+       SUM(Used_MB) AS Used_MB_End
+   FROM [dbo].[TableSize]
+   WHERE DBName = 'rev_RevenueManagement'
+     AND CAST(DateTime AS DATE) = '2025-07-30'
+   GROUP BY DBName, TableName
+)
+ 
+SELECT
+   COALESCE(e.DBName, s.DBName) AS DBName,
+   COALESCE(e.TableName, s.TableName) AS TableName,
+   s.Used_MB_Start,
+   e.Used_MB_End,
+   ISNULL(e.Used_MB_End, 0) - ISNULL(s.Used_MB_Start, 0) AS Growth_MB
+FROM StartSize s
+FULL OUTER JOIN EndSize e
+   ON s.DBName = e.DBName AND s.TableName = e.TableName
+WHERE s.Used_MB_Start IS NOT NULL OR e.Used_MB_End IS NOT NULL
+ORDER BY Growth_MB DESC;
 
-Easy reporting capabilities
+>>> Automated daily capture of database and table growth
+>>> Historical tracking for trend analysis
+>>> SQL Agent jobs for automation
+>>> Easy reporting capabilities
+>>> Error logging and job history tracking
 
-Error logging and job history tracking
+
+
 
