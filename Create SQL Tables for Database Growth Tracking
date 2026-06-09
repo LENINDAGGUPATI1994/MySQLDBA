@@ -1,0 +1,501 @@
+1. Create the Main Tables
+sql
+-- Table to track overall database growth
+CREATE TABLE [dbo].[DB_Growth] (
+    [ID] INT IDENTITY(1,1) PRIMARY KEY,
+    [DBName] NVARCHAR(128) NOT NULL,
+    [Total_Size_MB] DECIMAL(20,2) NOT NULL,
+    [Data_Size_MB] DECIMAL(20,2) NOT NULL,
+    [Index_Size_MB] DECIMAL(20,2) NOT NULL,
+    [Unused_Size_MB] DECIMAL(20,2) NOT NULL,
+    [DateTime] DATETIME NOT NULL DEFAULT GETDATE(),
+    [RecordDate] DATE NOT NULL DEFAULT CAST(GETDATE() AS DATE),
+    [ServerName] NVARCHAR(128) DEFAULT @@SERVERNAME
+);
+
+-- Create indexes for better query performance
+CREATE INDEX IX_DB_Growth_DateTime ON [dbo].[DB_Growth] (DateTime);
+CREATE INDEX IX_DB_Growth_DBName_DateTime ON [dbo].[DB_Growth] (DBName, DateTime);
+CREATE INDEX IX_DB_Growth_RecordDate ON [dbo].[DB_Growth] (RecordDate);
+
+-- Table to track individual table growth
+CREATE TABLE [dbo].[TableSize] (
+    [ID] INT IDENTITY(1,1) PRIMARY KEY,
+    [DBName] NVARCHAR(128) NOT NULL,
+    [SchemaName] NVARCHAR(128) NOT NULL,
+    [TableName] NVARCHAR(128) NOT NULL,
+    [Used_MB] DECIMAL(20,2) NOT NULL,
+    [Rows] BIGINT NULL,
+    [DateTime] DATETIME NOT NULL DEFAULT GETDATE(),
+    [RecordDate] DATE NOT NULL DEFAULT CAST(GETDATE() AS DATE),
+    [ServerName] NVARCHAR(128) DEFAULT @@SERVERNAME
+);
+
+-- Create indexes for table size queries
+CREATE INDEX IX_TableSize_DBName_TableName ON [dbo].[TableSize] (DBName, TableName);
+CREATE INDEX IX_TableSize_DateTime ON [dbo].[TableSize] (DateTime);
+CREATE INDEX IX_TableSize_DBName_RecordDate ON [dbo].[TableSize] (DBName, RecordDate);
+CREATE INDEX IX_TableSize_DBName_TableName_DateTime ON [dbo].[TableSize] (DBName, TableName, DateTime);
+
+-- Table to track job execution history
+CREATE TABLE [dbo].[GrowthTracking_JobHistory] (
+    [ID] INT IDENTITY(1,1) PRIMARY KEY,
+    [JobName] NVARCHAR(256) NOT NULL,
+    [StartTime] DATETIME NOT NULL,
+    [EndTime] DATETIME NULL,
+    [Status] VARCHAR(20) NOT NULL, -- 'Success', 'Failed', 'Running'
+    [RecordsInserted_DB] INT NULL,
+    [RecordsInserted_Tables] INT NULL,
+    [ErrorMessage] NVARCHAR(MAX) NULL,
+    [DatabasesProcessed] INT NULL
+);
+2. Create Stored Procedures
+sql
+-- Stored Procedure to capture database growth
+CREATE OR ALTER PROCEDURE [dbo].[sp_CaptureDatabaseGrowth]
+    @DatabaseName NVARCHAR(128) = NULL, -- NULL for all databases
+    @LogToHistory BIT = 1
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    DECLARE @StartTime DATETIME = GETDATE();
+    DECLARE @JobName NVARCHAR(256) = 'Capture Database Growth';
+    DECLARE @RecordsInserted INT = 0;
+    DECLARE @ErrorMessage NVARCHAR(MAX) = NULL;
+    DECLARE @Status VARCHAR(20) = 'Success';
+    DECLARE @DatabasesProcessed INT = 0;
+    
+    BEGIN TRY
+        -- Create temp table to store results
+        CREATE TABLE #DatabaseSizes (
+            DBName NVARCHAR(128),
+            Total_Size_MB DECIMAL(20,2),
+            Data_Size_MB DECIMAL(20,2),
+            Index_Size_MB DECIMAL(20,2),
+            Unused_Size_MB DECIMAL(20,2)
+        );
+        
+        -- Get all databases or specific one
+        DECLARE @db_cursor CURSOR;
+        
+        IF @DatabaseName IS NULL
+        BEGIN
+            SET @db_cursor = CURSOR FOR
+                SELECT name 
+                FROM sys.databases 
+                WHERE state = 0 -- Online only
+                AND database_id > 4 -- Exclude system databases (optional)
+                ORDER BY name;
+        END
+        ELSE
+        BEGIN
+            SET @db_cursor = CURSOR FOR
+                SELECT @DatabaseName 
+                WHERE EXISTS (SELECT 1 FROM sys.databases WHERE name = @DatabaseName);
+        END
+        
+        DECLARE @DBName NVARCHAR(128);
+        
+        OPEN @db_cursor;
+        FETCH NEXT FROM @db_cursor INTO @DBName;
+        
+        WHILE @@FETCH_STATUS = 0
+        BEGIN
+            SET @DatabasesProcessed = @DatabasesProcessed + 1;
+            
+            -- Dynamic SQL to get database size
+            DECLARE @SQL NVARCHAR(MAX) = '
+                USE [' + @DBName + '];
+                
+                INSERT INTO #DatabaseSizes (DBName, Total_Size_MB, Data_Size_MB, Index_Size_MB, Unused_Size_MB)
+                SELECT 
+                    DB_NAME() AS DBName,
+                    SUM(CASE WHEN type = 0 THEN size ELSE 0 END) * 8 / 1024.0 AS Total_Size_MB,
+                    SUM(CASE WHEN type = 0 AND data_space_id IN (SELECT data_space_id FROM sys.filegroups) THEN size ELSE 0 END) * 8 / 1024.0 AS Data_Size_MB,
+                    SUM(CASE WHEN type = 2 THEN size ELSE 0 END) * 8 / 1024.0 AS Index_Size_MB,
+                    SUM(CASE WHEN type = 0 AND data_space_id NOT IN (SELECT data_space_id FROM sys.filegroups) THEN size ELSE 0 END) * 8 / 1024.0 AS Unused_Size_MB
+                FROM sys.database_files
+                WHERE type IN (0,1,2); -- Data, Log, Filestream
+            ';
+            
+            BEGIN TRY
+                EXEC sp_executesql @SQL;
+            END TRY
+            BEGIN CATCH
+                PRINT 'Error processing database: ' + @DBName;
+                PRINT ERROR_MESSAGE();
+            END CATCH
+            
+            FETCH NEXT FROM @db_cursor INTO @DBName;
+        END
+        
+        CLOSE @db_cursor;
+        DEALLOCATE @db_cursor;
+        
+        -- Insert into DB_Growth table
+        INSERT INTO [dbo].[DB_Growth] (DBName, Total_Size_MB, Data_Size_MB, Index_Size_MB, Unused_Size_MB, DateTime, RecordDate)
+        SELECT 
+            DBName, 
+            Total_Size_MB, 
+            Data_Size_MB, 
+            Index_Size_MB, 
+            Unused_Size_MB,
+            GETDATE(),
+            CAST(GETDATE() AS DATE)
+        FROM #DatabaseSizes;
+        
+        SET @RecordsInserted = @@ROWCOUNT;
+        
+        DROP TABLE #DatabaseSizes;
+        
+        -- Log to history
+        IF @LogToHistory = 1
+        BEGIN
+            INSERT INTO [dbo].[GrowthTracking_JobHistory] (JobName, StartTime, EndTime, Status, RecordsInserted_DB, DatabasesProcessed)
+            VALUES (@JobName, @StartTime, GETDATE(), @Status, @RecordsInserted, @DatabasesProcessed);
+        END
+        
+    END TRY
+    BEGIN CATCH
+        SET @Status = 'Failed';
+        SET @ErrorMessage = ERROR_MESSAGE();
+        
+        IF @LogToHistory = 1
+        BEGIN
+            INSERT INTO [dbo].[GrowthTracking_JobHistory] (JobName, StartTime, EndTime, Status, ErrorMessage, DatabasesProcessed)
+            VALUES (@JobName, @StartTime, GETDATE(), @Status, @ErrorMessage, @DatabasesProcessed);
+        END
+        
+        THROW;
+    END CATCH
+END;
+GO
+
+-- Stored Procedure to capture table growth
+CREATE OR ALTER PROCEDURE [dbo].[sp_CaptureTableGrowth]
+    @DatabaseName NVARCHAR(128) = NULL, -- NULL for all databases
+    @LogToHistory BIT = 1
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    DECLARE @StartTime DATETIME = GETDATE();
+    DECLARE @JobName NVARCHAR(256) = 'Capture Table Growth';
+    DECLARE @RecordsInserted INT = 0;
+    DECLARE @ErrorMessage NVARCHAR(MAX) = NULL;
+    DECLARE @Status VARCHAR(20) = 'Success';
+    DECLARE @DatabasesProcessed INT = 0;
+    
+    BEGIN TRY
+        -- Get all user databases
+        DECLARE @db_cursor CURSOR;
+        
+        IF @DatabaseName IS NULL
+        BEGIN
+            SET @db_cursor = CURSOR FOR
+                SELECT name 
+                FROM sys.databases 
+                WHERE state = 0 
+                AND database_id > 4
+                AND name NOT IN ('master', 'model', 'msdb', 'tempdb')
+                ORDER BY name;
+        END
+        ELSE
+        BEGIN
+            SET @db_cursor = CURSOR FOR
+                SELECT @DatabaseName 
+                WHERE EXISTS (SELECT 1 FROM sys.databases WHERE name = @DatabaseName);
+        END
+        
+        DECLARE @DBName NVARCHAR(128);
+        
+        OPEN @db_cursor;
+        FETCH NEXT FROM @db_cursor INTO @DBName;
+        
+        WHILE @@FETCH_STATUS = 0
+        BEGIN
+            SET @DatabasesProcessed = @DatabasesProcessed + 1;
+            
+            -- Dynamic SQL to capture table sizes
+            DECLARE @SQL NVARCHAR(MAX) = '
+                USE [' + @DBName + '];
+                
+                INSERT INTO [dbo].[TableSize] (DBName, SchemaName, TableName, Used_MB, Rows, DateTime, RecordDate)
+                SELECT 
+                    DB_NAME() AS DBName,
+                    s.name AS SchemaName,
+                    t.name AS TableName,
+                    SUM(a.total_pages) * 8 / 1024.0 AS Used_MB,
+                    SUM(CASE WHEN p.index_id IN (0,1) THEN p.rows ELSE 0 END) AS Rows
+                FROM sys.tables t
+                INNER JOIN sys.schemas s ON t.schema_id = s.schema_id
+                INNER JOIN sys.indexes i ON t.object_id = i.object_id
+                INNER JOIN sys.partitions p ON i.object_id = p.object_id AND i.index_id = p.index_id
+                INNER JOIN sys.allocation_units a ON p.partition_id = a.container_id
+                WHERE t.is_ms_shipped = 0
+                GROUP BY s.name, t.name
+                ORDER BY Used_MB DESC;
+            ';
+            
+            BEGIN TRY
+                EXEC sp_executesql @SQL;
+                SET @RecordsInserted = @RecordsInserted + @@ROWCOUNT;
+            END TRY
+            BEGIN CATCH
+                PRINT 'Error processing tables in database: ' + @DBName;
+                PRINT ERROR_MESSAGE();
+            END CATCH
+            
+            FETCH NEXT FROM @db_cursor INTO @DBName;
+        END
+        
+        CLOSE @db_cursor;
+        DEALLOCATE @db_cursor;
+        
+        -- Log to history
+        IF @LogToHistory = 1
+        BEGIN
+            INSERT INTO [dbo].[GrowthTracking_JobHistory] (JobName, StartTime, EndTime, Status, RecordsInserted_Tables, DatabasesProcessed)
+            VALUES (@JobName, @StartTime, GETDATE(), @Status, @RecordsInserted, @DatabasesProcessed);
+        END
+        
+    END TRY
+    BEGIN CATCH
+        SET @Status = 'Failed';
+        SET @ErrorMessage = ERROR_MESSAGE();
+        
+        IF @LogToHistory = 1
+        BEGIN
+            INSERT INTO [dbo].[GrowthTracking_JobHistory] (JobName, StartTime, EndTime, Status, ErrorMessage, DatabasesProcessed)
+            VALUES (@JobName, @StartTime, GETDATE(), @Status, @ErrorMessage, @DatabasesProcessed);
+        END
+        
+        THROW;
+    END CATCH
+END;
+GO
+
+-- Stored Procedure to generate growth report
+CREATE OR ALTER PROCEDURE [dbo].[sp_GenerateGrowthReport]
+    @StartDate DATE,
+    @EndDate DATE,
+    @DatabaseName NVARCHAR(128) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    -- Database Growth Report
+    SELECT 
+        DBName,
+        Total_Size_MB,
+        Data_Size_MB,
+        Index_Size_MB,
+        Unused_Size_MB,
+        DateTime,
+        RecordDate
+    FROM [dbo].[DB_Growth]
+    WHERE RecordDate BETWEEN @StartDate AND @EndDate
+        AND (@DatabaseName IS NULL OR DBName = @DatabaseName)
+    ORDER BY DBName, DateTime;
+    
+    -- Table Growth Report for specific database
+    IF @DatabaseName IS NOT NULL
+    BEGIN
+        WITH StartSize AS (
+            SELECT
+                DBName,
+                SchemaName,
+                TableName,
+                SUM(Used_MB) AS Used_MB_Start,
+                SUM(Rows) AS Rows_Start
+            FROM [dbo].[TableSize]
+            WHERE DBName = @DatabaseName
+                AND CAST(DateTime AS DATE) = @StartDate
+            GROUP BY DBName, SchemaName, TableName
+        ),
+        EndSize AS (
+            SELECT
+                DBName,
+                SchemaName,
+                TableName,
+                SUM(Used_MB) AS Used_MB_End,
+                SUM(Rows) AS Rows_End
+            FROM [dbo].[TableSize]
+            WHERE DBName = @DatabaseName
+                AND CAST(DateTime AS DATE) = @EndDate
+            GROUP BY DBName, SchemaName, TableName
+        )
+        SELECT
+            COALESCE(e.DBName, s.DBName) AS DBName,
+            COALESCE(e.SchemaName, s.SchemaName) AS SchemaName,
+            COALESCE(e.TableName, s.TableName) AS TableName,
+            s.Used_MB_Start,
+            e.Used_MB_End,
+            ISNULL(e.Used_MB_End, 0) - ISNULL(s.Used_MB_Start, 0) AS Growth_MB,
+            s.Rows_Start,
+            e.Rows_End,
+            ISNULL(e.Rows_End, 0) - ISNULL(s.Rows_Start, 0) AS Row_Growth
+        FROM StartSize s
+        FULL OUTER JOIN EndSize e
+            ON s.DBName = e.DBName 
+            AND s.SchemaName = e.SchemaName 
+            AND s.TableName = e.TableName
+        WHERE s.Used_MB_Start IS NOT NULL OR e.Used_MB_End IS NOT NULL
+        ORDER BY Growth_MB DESC;
+    END
+END;
+GO
+3. Create SQL Agent Jobs
+sql
+-- Job 1: Daily Database Growth Capture (runs daily at 1:00 AM)
+USE [msdb];
+GO
+
+DECLARE @jobId BINARY(16);
+EXEC dbo.sp_add_job
+    @job_name = N'Daily Database Growth Capture',
+    @enabled = 1,
+    @description = N'Captures database size metrics daily',
+    @category_name = N'Database Maintenance',
+    @owner_login_name = N'sa',
+    @job_id = @jobId OUTPUT;
+
+EXEC dbo.sp_add_jobstep
+    @job_name = N'Daily Database Growth Capture',
+    @step_name = N'Capture Database Growth',
+    @step_id = 1,
+    @command = N'EXEC [dbo].[sp_CaptureDatabaseGrowth] @LogToHistory = 1;',
+    @database_name = N'YourDatabaseName', -- Change to your actual database name
+    @on_success_action = 3, -- Go to next step
+    @on_fail_action = 2; -- Quit with failure
+
+EXEC dbo.sp_add_jobstep
+    @job_name = N'Daily Database Growth Capture',
+    @step_name = N'Capture Table Growth',
+    @step_id = 2,
+    @command = N'EXEC [dbo].[sp_CaptureTableGrowth] @LogToHistory = 1;',
+    @database_name = N'YourDatabaseName', -- Change to your actual database name
+    @on_success_action = 1, -- Quit with success
+    @on_fail_action = 2; -- Quit with failure
+
+EXEC dbo.sp_add_schedule
+    @schedule_name = N'Daily_1AM',
+    @freq_type = 4, -- Daily
+    @freq_interval = 1, -- Every day
+    @active_start_time = 10000; -- 1:00 AM
+
+EXEC dbo.sp_attach_schedule
+    @job_name = N'Daily Database Growth Capture',
+    @schedule_name = N'Daily_1AM';
+
+EXEC dbo.sp_add_jobserver
+    @job_name = N'Daily Database Growth Capture';
+GO
+
+-- Job 2: Weekly Table Growth Report (runs every Monday at 2:00 AM)
+USE [msdb];
+GO
+
+DECLARE @jobId BINARY(16);
+EXEC dbo.sp_add_job
+    @job_name = N'Weekly Table Growth Report',
+    @enabled = 1,
+    @description = N'Generates weekly table growth reports',
+    @category_name = N'Database Maintenance',
+    @owner_login_name = N'sa',
+    @job_id = @jobId OUTPUT;
+
+EXEC dbo.sp_add_jobstep
+    @job_name = N'Weekly Table Growth Report',
+    @step_name = N'Generate Growth Report',
+    @step_id = 1,
+    @command = N'
+        DECLARE @StartDate DATE = DATEADD(day, -7, GETDATE());
+        DECLARE @EndDate DATE = GETDATE();
+        
+        EXEC [dbo].[sp_GenerateGrowthReport] 
+            @StartDate = @StartDate,
+            @EndDate = @EndDate,
+            @DatabaseName = ''rev_RevenueManagement''; -- Change to your DB name
+    ',
+    @database_name = N'YourDatabaseName', -- Change to your actual database name
+    @on_success_action = 1,
+    @on_fail_action = 2;
+
+EXEC dbo.sp_add_schedule
+    @schedule_name = N'Weekly_Monday_2AM',
+    @freq_type = 8, -- Weekly
+    @freq_interval = 2, -- Monday
+    @freq_recurrence_factor = 1,
+    @active_start_time = 20000; -- 2:00 AM
+
+EXEC dbo.sp_attach_schedule
+    @job_name = N'Weekly Table Growth Report',
+    @schedule_name = N'Weekly_Monday_2AM';
+
+EXEC dbo.sp_add_jobserver
+    @job_name = N'Weekly Table Growth Report';
+GO
+4. Cleanup Old Data (Optional)
+sql
+-- Stored procedure to cleanup old data (keep last 90 days)
+CREATE OR ALTER PROCEDURE [dbo].[sp_CleanupOldGrowthData]
+    @RetentionDays INT = 90
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    DECLARE @CutoffDate DATE = DATEADD(day, -@RetentionDays, GETDATE());
+    
+    DELETE FROM [dbo].[DB_Growth] 
+    WHERE RecordDate < @CutoffDate;
+    
+    DELETE FROM [dbo].[TableSize] 
+    WHERE RecordDate < @CutoffDate;
+    
+    DELETE FROM [dbo].[GrowthTracking_JobHistory]
+    WHERE StartTime < @CutoffDate;
+    
+    PRINT 'Cleaned up data older than ' + CAST(@RetentionDays AS VARCHAR) + ' days';
+END;
+GO
+Usage Examples:
+sql
+-- Manually capture growth for all databases
+EXEC [dbo].[sp_CaptureDatabaseGrowth] @LogToHistory = 1;
+EXEC [dbo].[sp_CaptureTableGrowth] @LogToHistory = 1;
+
+-- Capture growth for specific database only
+EXEC [dbo].[sp_CaptureDatabaseGrowth] @DatabaseName = 'rev_RevenueManagement';
+EXEC [dbo].[sp_CaptureTableGrowth] @DatabaseName = 'rev_RevenueManagement';
+
+-- Generate report for Feb 2025
+EXEC [dbo].[sp_GenerateGrowthReport] 
+    @StartDate = '2025-02-01',
+    @EndDate = '2025-02-28';
+
+-- Generate report for specific database
+EXEC [dbo].[sp_GenerateGrowthReport] 
+    @StartDate = '2025-06-28',
+    @EndDate = '2025-07-30',
+    @DatabaseName = 'rev_RevenueManagement';
+
+-- Check job history
+SELECT * FROM [dbo].[GrowthTracking_JobHistory] 
+ORDER BY StartTime DESC;
+
+-- Cleanup old data (keep last 90 days)
+EXEC [dbo].[sp_CleanupOldGrowthData] @RetentionDays = 90;
+This setup provides:
+
+Automated daily capture of database and table growth
+
+Historical tracking for trend analysis
+
+SQL Agent jobs for automation
+
+Easy reporting capabilities
+
+Error logging and job history tracking
+
