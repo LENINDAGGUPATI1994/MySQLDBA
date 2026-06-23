@@ -1,0 +1,4 @@
+
+EXEC msdb.dbo.sp_help_jobhistory
+    @job_name = 'DBA - Daily Growth Capture',
+    @mode = 'FULL';
