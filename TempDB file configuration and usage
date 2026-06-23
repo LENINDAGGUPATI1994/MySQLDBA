@@ -1,0 +1,21 @@
+-- TempDB file configuration and usage
+SELECT 
+    name,
+    file_id,
+    type_desc,
+    state_desc,
+    size * 8 / 1024 AS size_mb,
+    max_size,
+    growth
+FROM sys.master_files
+WHERE database_id = 2;  -- TempDB database_id
+
+-- TempDB contention (PAGELATCH waits on tempdb)
+SELECT 
+    wait_type,
+    waiting_tasks_count,
+    wait_time_ms / 1000 AS wait_time_seconds,
+    max_wait_time_ms / 1000 AS max_wait_seconds
+FROM sys.dm_os_wait_stats
+WHERE wait_type LIKE '%PAGELATCH%' AND wait_type LIKE '%2%';
+-- High waits here indicate TempDB contention
