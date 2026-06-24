@@ -1,0 +1,90 @@
+
+--- Step 1 — Enable Database Mail XP (if not done)
+-- Run this first to enable the feature
+sp_configure 'show advanced options', 1;
+RECONFIGURE;
+
+sp_configure 'Database Mail XPs', 1;
+RECONFIGURE;
+
+--- Step 2 — Create a Database Mail Account This is your SMTP sender identity.
+EXECUTE msdb.dbo.sysmail_add_account_sp
+    @account_name        = 'ProvenTech Mail Account',
+    @description         = 'Mail account for SQL Server alerts',
+    @email_address       = 'lenin.daggupati@proventech.in',  -- your FROM address
+    @replyto_address     = 'lenin.daggupati@proventech.in',
+    @display_name        = 'SQL Server Alerts',
+    @mailserver_name     = 'smtp.proventech.in',       -- ⚠️ update to your SMTP server
+    @port                = 587,                         -- 25, 465, or 587
+    @enable_ssl          = 1,                           -- 1 for TLS/SSL
+    @username            = 'lenin.daggupati@proventech.in',  -- SMTP auth username
+    @password            = 'Az$qldba@8055';          -- SMTP auth password
+
+--Common SMTP servers for business email:
+--Office 365: smtp.office365.com, port 587, SSL 1
+--Gmail Workspace: smtp.gmail.com, port 587, SSL 1
+--On-prem Exchange: your Exchange server FQDN, port 25, SSL 0
+
+
+
+--Step 3 — Create a Mail Profile
+EXECUTE msdb.dbo.sysmail_add_profile_sp
+    @profile_name = 'Default Mail Profile',
+    @description  = 'Primary profile for database notifications';
+
+--- Step 4 — Link Account to Profile
+EXECUTE msdb.dbo.sysmail_add_profileaccount_sp
+    @profile_name   = 'Default Mail Profile',
+    @account_name   = 'ProvenTech Mail Account',
+    @sequence_number = 1;  -- order of failover accounts
+
+--- Step 5 — Grant Profile Access to Users -- Grant to public so SQL Agent jobs can use it
+EXECUTE msdb.dbo.sysmail_add_principalprofile_sp
+    @profile_name     = 'Default Mail Profile',
+    @principal_name   = 'public',
+    @is_default       = 1;
+
+--- Step 6 — Send a Test Email
+EXEC msdb.dbo.sp_send_dbmail
+    @profile_name  = 'Default Mail Profile',
+    @recipients    = 'lenin.daggupati@proventech.in',
+    @subject       = 'SQL Server Database Mail Test',
+    @body          = 'This is a test email from SQL Server Database Mail. If you received this, setup is working!';
+
+--- Step 7 — Configure SQL Agent to Use the Profile
+Go to: SQL Server Agent → Properties → Alert System tab
+
+✅ Enable mail profile
+Select Mail system: Database Mail
+Select Mail profile: Default Mail Profile
+Restart SQL Server Agent service after this change
+
+-- First find your account ID
+SELECT account_id, name FROM msdb.dbo.sysmail_account;
+
+-- Then update with the IP instead of hostname
+EXECUTE msdb.dbo.sysmail_update_account_sp
+    @account_name    = 'ProvenTech Mail Account',
+    @mailserver_name = '103.24.126.83';  -- replace with actual IP of your SMTP server
+
+
+-- If using Microsoft 365 / Office 365
+EXECUTE msdb.dbo.sysmail_update_account_sp
+    @account_name    = 'ProvenTech Mail Account',
+    @mailserver_name = 'smtp.office365.com',
+    @port            = 587,
+    @enable_ssl      = 1;
+
+-- If using Google Workspace
+EXECUTE msdb.dbo.sysmail_update_account_sp
+    @account_name    = 'ProvenTech Mail Account',
+    @mailserver_name = 'smtp.gmail.com',
+    @port            = 587,
+    @enable_ssl      = 1;
+
+-- If using on-premise Exchange
+EXECUTE msdb.dbo.sysmail_update_account_sp
+    @account_name    = 'ProvenTech Mail Account',
+    @mailserver_name = 'mail.proventech.in',   -- or your Exchange server FQDN
+    @port            = 25,
+    @enable_ssl      = 0;
