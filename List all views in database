@@ -1,0 +1,19 @@
+-- List all views in current database
+
+Use Database --- select Database
+Go
+SELECT 
+    name AS ViewName,
+    SCHEMA_NAME(schema_id) AS SchemaName,
+    create_date,
+    modify_date
+FROM sys.views
+ORDER BY name;
+
+-- Using INFORMATION_SCHEMA
+SELECT 
+    TABLE_NAME AS ViewName,
+    TABLE_SCHEMA AS SchemaName
+FROM INFORMATION_SCHEMA.VIEWS
+WHERE TABLE_SCHEMA NOT IN ('sys', 'information_schema')
+ORDER BY TABLE_NAME;
