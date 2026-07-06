@@ -1,0 +1,20 @@
+-- List all stored procedures in current database
+
+Use Database --- Select Database
+Go
+SELECT 
+    name AS ProcedureName,
+    SCHEMA_NAME(schema_id) AS SchemaName,
+    create_date,
+    modify_date
+FROM sys.procedures
+ORDER BY name;
+
+-- List user-defined stored procedures only (exclude system)
+SELECT 
+    ROUTINE_NAME,
+    ROUTINE_SCHEMA
+FROM INFORMATION_SCHEMA.ROUTINES
+WHERE ROUTINE_TYPE = 'PROCEDURE'
+    AND ROUTINE_SCHEMA NOT IN ('sys', 'information_schema')
+ORDER BY ROUTINE_NAME;
