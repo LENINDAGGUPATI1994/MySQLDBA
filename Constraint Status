@@ -1,0 +1,32 @@
+-- Disabled CHECK Constraints
+SELECT 
+    'CHECK' AS ConstraintType,
+    OBJECT_SCHEMA_NAME(parent_object_id) AS SchemaName,
+    OBJECT_NAME(parent_object_id) AS TableName,
+    name AS ConstraintName,
+    is_disabled,
+    is_not_trusted
+FROM sys.check_constraints
+WHERE is_disabled = 1
+
+UNION ALL
+
+-- Disabled FOREIGN KEY Constraints
+SELECT
+    'FOREIGN KEY' AS ConstraintType,
+    OBJECT_SCHEMA_NAME(parent_object_id) AS SchemaName,
+    OBJECT_NAME(parent_object_id) AS TableName,
+    name AS ConstraintName,
+    is_disabled,
+    is_not_trusted
+FROM sys.foreign_keys
+WHERE is_disabled = 1
+ORDER BY SchemaName, TableName, ConstraintName;
+
+--- Enable Constraint
+EXEC sp_MSforeachtable 
+    'ALTER TABLE ? WITH CHECK CHECK CONSTRAINT ALL';
+
+--- Disable Constraint
+EXEC sp_MSforeachtable 
+    'ALTER TABLE ? WITH CHECK NOCHECK CONSTRAINT ALL';
