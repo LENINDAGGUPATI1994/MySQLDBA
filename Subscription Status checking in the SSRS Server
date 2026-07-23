@@ -1,0 +1,13 @@
+--- Subscription Status checking in the SSRS Server
+SELECT
+    s.SubscriptionID,
+    c.Name AS ReportName,
+    s.LastStatus,
+    s.LastRunTime,
+    su.UserName
+FROM Subscriptions s
+INNER JOIN Catalog c
+    ON s.Report_OID = c.ItemID
+INNER JOIN Users su
+    ON s.OwnerID = su.UserID
+ORDER BY s.LastRunTime DESC;
