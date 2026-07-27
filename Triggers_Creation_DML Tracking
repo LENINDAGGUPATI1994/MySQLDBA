@@ -1,30 +1,192 @@
-CREATE TRIGGER trg_Source_DML
-ON SourceTable
+USE [CIPLA]
+GO
+
+/* =========================================================================
+   TRIGGER 1: Sequence_Channel  -->  Sequence_Channel_Curated
+   Columns: ChannelId (IDENTITY, PK), InjectionId, ChannelName, DetectorType,
+            Wavelength, DataRate
+   ========================================================================= */
+IF OBJECT_ID('dbo.trg_Sequence_Channel_DML', 'TR') IS NOT NULL
+    DROP TRIGGER dbo.trg_Sequence_Channel_DML;
+GO
+
+CREATE TRIGGER dbo.trg_Sequence_Channel_DML
+ON [dbo].[Sequence_Channel]
 AFTER INSERT, UPDATE, DELETE
 AS
 BEGIN
     SET NOCOUNT ON;
 
-    -- Handle INSERT
-    INSERT INTO TargetTable (Id, Name, Salary)
-    SELECT I.Id, I.Name, I.Salary
-    FROM INSERTED I
-    LEFT JOIN DELETED D ON I.Id = D.Id
-    WHERE D.Id IS NULL;
+    -- ---------- INSERT ----------
+    IF EXISTS (SELECT 1 FROM INSERTED) AND NOT EXISTS (SELECT 1 FROM DELETED)
+    BEGIN
+        SET IDENTITY_INSERT [dbo].[Sequence_Channel_Curated] ON;
 
-    -- Handle UPDATE
-    UPDATE T
-    SET 
-        T.Name = I.Name,
-        T.Salary = I.Salary
-    FROM TargetTable T
-    INNER JOIN INSERTED I ON T.Id = I.Id
-    INNER JOIN DELETED D ON I.Id = D.Id;
+        INSERT INTO [dbo].[Sequence_Channel_Curated]
+            (ChannelId, InjectionId, ChannelName, DetectorType, Wavelength, DataRate)
+        SELECT
+            I.ChannelId, I.InjectionId, I.ChannelName, I.DetectorType, I.Wavelength, I.DataRate
+        FROM INSERTED I
+        LEFT JOIN DELETED D ON I.ChannelId = D.ChannelId
+        WHERE D.ChannelId IS NULL;
 
-    -- Handle DELETE
-    DELETE T
-    FROM TargetTable T
-    INNER JOIN DELETED D ON T.Id = D.Id
-    LEFT JOIN INSERTED I ON D.Id = I.Id
-    WHERE I.Id IS NULL;
+        SET IDENTITY_INSERT [dbo].[Sequence_Channel_Curated] OFF;
+    END
+
+    -- ---------- UPDATE ----------
+    IF EXISTS (SELECT 1 FROM INSERTED) AND EXISTS (SELECT 1 FROM DELETED)
+    BEGIN
+        UPDATE T
+        SET
+            T.InjectionId  = I.InjectionId,
+            T.ChannelName  = I.ChannelName,
+            T.DetectorType = I.DetectorType,
+            T.Wavelength   = I.Wavelength,
+            T.DataRate     = I.DataRate
+        FROM [dbo].[Sequence_Channel_Curated] T
+        INNER JOIN INSERTED I ON T.ChannelId = I.ChannelId
+        INNER JOIN DELETED D  ON I.ChannelId = D.ChannelId;
+    END
+
+    -- ---------- DELETE ----------
+    IF NOT EXISTS (SELECT 1 FROM INSERTED) AND EXISTS (SELECT 1 FROM DELETED)
+    BEGIN
+        DELETE T
+        FROM [dbo].[Sequence_Channel_Curated] T
+        INNER JOIN DELETED D ON T.ChannelId = D.ChannelId;
+    END
 END;
+GO
+
+
+/* =========================================================================
+   TRIGGER 2: Sequence_Component  -->  Sequence_Component_Curated
+   Columns: ComponentId (IDENTITY, PK), ProcessingMethodId, ComponentName,
+            RetentionTime, ResponseFactor
+   ========================================================================= */
+IF OBJECT_ID('dbo.trg_Sequence_Component_DML', 'TR') IS NOT NULL
+    DROP TRIGGER dbo.trg_Sequence_Component_DML;
+GO
+
+CREATE TRIGGER dbo.trg_Sequence_Component_DML
+ON [dbo].[Sequence_Component]
+AFTER INSERT, UPDATE, DELETE
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    -- ---------- INSERT ----------
+    IF EXISTS (SELECT 1 FROM INSERTED) AND NOT EXISTS (SELECT 1 FROM DELETED)
+    BEGIN
+        SET IDENTITY_INSERT [dbo].[Sequence_Component_Curated] ON;
+
+        INSERT INTO [dbo].[Sequence_Component_Curated]
+            (ComponentId, ProcessingMethodId, ComponentName, RetentionTime, ResponseFactor)
+        SELECT
+            I.ComponentId, I.ProcessingMethodId, I.ComponentName, I.RetentionTime, I.ResponseFactor
+        FROM INSERTED I
+        LEFT JOIN DELETED D ON I.ComponentId = D.ComponentId
+        WHERE D.ComponentId IS NULL;
+
+        SET IDENTITY_INSERT [dbo].[Sequence_Component_Curated] OFF;
+    END
+
+    -- ---------- UPDATE ----------
+    IF EXISTS (SELECT 1 FROM INSERTED) AND EXISTS (SELECT 1 FROM DELETED)
+    BEGIN
+        UPDATE T
+        SET
+            T.ProcessingMethodId = I.ProcessingMethodId,
+            T.ComponentName      = I.ComponentName,
+            T.RetentionTime      = I.RetentionTime,
+            T.ResponseFactor     = I.ResponseFactor
+        FROM [dbo].[Sequence_Component_Curated] T
+        INNER JOIN INSERTED I ON T.ComponentId = I.ComponentId
+        INNER JOIN DELETED D  ON I.ComponentId = D.ComponentId;
+    END
+
+    -- ---------- DELETE ----------
+    IF NOT EXISTS (SELECT 1 FROM INSERTED) AND EXISTS (SELECT 1 FROM DELETED)
+    BEGIN
+        DELETE T
+        FROM [dbo].[Sequence_Component_Curated] T
+        INNER JOIN DELETED D ON T.ComponentId = D.ComponentId;
+    END
+END;
+GO
+
+
+/* =========================================================================
+   TRIGGER 3: Sequence_DetectionSetting  -->  Sequence_DetectionSetting_Curated
+   Columns: DetectionSettingId (IDENTITY, PK), InstrumentMethodId, DetectorType,
+            Wavelength, SamplingRate, BandWidth
+
+   NOTE: This assumes Sequence_DetectionSetting_Curated exists with the same
+   structure as Sequence_DetectionSetting (mirroring the _Curated pattern
+   used for Channel and Component above). If you haven't created it yet,
+   run this first:
+
+   CREATE TABLE [dbo].[Sequence_DetectionSetting_Curated](
+       [DetectionSettingId] [int] IDENTITY(1,1) NOT NULL,
+       [InstrumentMethodId] [int] NOT NULL,
+       [DetectorType] [varchar](50) NULL,
+       [Wavelength] [decimal](6, 2) NULL,
+       [SamplingRate] [decimal](6, 2) NULL,
+       [BandWidth] [decimal](6, 2) NULL,
+       PRIMARY KEY CLUSTERED ([DetectionSettingId] ASC)
+   );
+   ALTER TABLE [dbo].[Sequence_DetectionSetting_Curated]
+       WITH CHECK ADD CONSTRAINT [FK_DetectionSetting_InstrumentMethod01]
+       FOREIGN KEY([InstrumentMethodId]) REFERENCES [dbo].[Sequence_InstrumentMethod] ([InstrumentMethodId]);
+   ========================================================================= */
+IF OBJECT_ID('dbo.trg_Sequence_DetectionSetting_DML', 'TR') IS NOT NULL
+    DROP TRIGGER dbo.trg_Sequence_DetectionSetting_DML;
+GO
+
+CREATE TRIGGER dbo.trg_Sequence_DetectionSetting_DML
+ON [dbo].[Sequence_DetectionSetting]
+AFTER INSERT, UPDATE, DELETE
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    -- ---------- INSERT ----------
+    IF EXISTS (SELECT 1 FROM INSERTED) AND NOT EXISTS (SELECT 1 FROM DELETED)
+    BEGIN
+        SET IDENTITY_INSERT [dbo].[Sequence_DetectionSetting_Curated] ON;
+
+        INSERT INTO [dbo].[Sequence_DetectionSetting_Curated]
+            (DetectionSettingId, InstrumentMethodId, DetectorType, Wavelength, SamplingRate, BandWidth)
+        SELECT
+            I.DetectionSettingId, I.InstrumentMethodId, I.DetectorType, I.Wavelength, I.SamplingRate, I.BandWidth
+        FROM INSERTED I
+        LEFT JOIN DELETED D ON I.DetectionSettingId = D.DetectionSettingId
+        WHERE D.DetectionSettingId IS NULL;
+
+        SET IDENTITY_INSERT [dbo].[Sequence_DetectionSetting_Curated] OFF;
+    END
+
+    -- ---------- UPDATE ----------
+    IF EXISTS (SELECT 1 FROM INSERTED) AND EXISTS (SELECT 1 FROM DELETED)
+    BEGIN
+        UPDATE T
+        SET
+            T.InstrumentMethodId = I.InstrumentMethodId,
+            T.DetectorType       = I.DetectorType,
+            T.Wavelength         = I.Wavelength,
+            T.SamplingRate       = I.SamplingRate,
+            T.BandWidth          = I.BandWidth
+        FROM [dbo].[Sequence_DetectionSetting_Curated] T
+        INNER JOIN INSERTED I ON T.DetectionSettingId = I.DetectionSettingId
+        INNER JOIN DELETED D  ON I.DetectionSettingId = D.DetectionSettingId;
+    END
+
+    -- ---------- DELETE ----------
+    IF NOT EXISTS (SELECT 1 FROM INSERTED) AND EXISTS (SELECT 1 FROM DELETED)
+    BEGIN
+        DELETE T
+        FROM [dbo].[Sequence_DetectionSetting_Curated] T
+        INNER JOIN DELETED D ON T.DetectionSettingId = D.DetectionSettingId;
+    END
+END;
+GO
