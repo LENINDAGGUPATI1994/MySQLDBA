@@ -1,0 +1,7 @@
+--- Curated Table Creation steps:
+
+1. Create a table with required columns, PK and FKs
+2. Load the data from the source to destination table with Insert Script
+3. Then create DML (INSERT, UPDATE & DELETE) triggers for all the tables 
+4. then create a AGENT for this to automate the task as per the schedule process
+5. Monitor the Process and capture all the Operations
