@@ -1,8 +1,13 @@
+AI Tools for MS SQL Server
+============================================
 --- For SQL Server Query Optimizer
 https://www.skills.sh/patricio0312rev/skills/sql-query-optimizer
 
 --- For SQL Server Code Writing
 https://github.com/obra/superpowers.git
+
+--- For SQL Server Query API to integrate the AI tool
+https://openrouter.ai/sign-in
 
 --- SQL Server Resource Monitoring and Recommendations
 https://www.mssqltips.com/sqlservertip/2730/sql-query-stress-tool/
