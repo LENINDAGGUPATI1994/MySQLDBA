@@ -1,0 +1,16 @@
+USE [CIPLA]
+GO
+
+SELECT
+    OBJECT_SCHEMA_NAME(t.parent_id)   AS TableSchema,
+    OBJECT_NAME(t.parent_id)          AS TableName,
+    t.name                             AS TriggerName,
+    t.create_date                      AS CreatedDate,
+    t.modify_date                      AS LastModifiedDate,
+    t.is_disabled                      AS IsDisabled,
+    LEN(m.definition)                  AS SizeInCharacters,
+    DATALENGTH(m.definition)           AS SizeInBytes,
+    CAST(DATALENGTH(m.definition) / 1024.0 / 1024.0 AS DECIMAL(10,6)) AS SizeInMB
+FROM sys.triggers t
+INNER JOIN sys.sql_modules m ON t.object_id = m.object_id
+ORDER BY SizeInBytes DESC;
