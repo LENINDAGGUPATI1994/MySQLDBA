@@ -1,0 +1,63 @@
+USE [CIPLA]
+GO
+
+/* =========================================================================
+   Generate 200 sample records for dbo.Sequence_Channel
+   - ChannelId is IDENTITY, so it's not inserted explicitly
+   - InjectionId is a mandatory FK -> dbo.Sequence_Injection
+     This script cycles through EXISTING InjectionId values in that table,
+     so it works regardless of how many injections you have or whether
+     their IDs are contiguous.
+
+   PREREQUISITE: dbo.Sequence_Injection must already have at least 1 row.
+   If it's empty, this will insert 0 rows (COUNT(*) = 0 guard below).
+   ========================================================================= */
+
+IF NOT EXISTS (SELECT 1 FROM dbo.Sequence_Injection)
+BEGIN
+    PRINT 'Sequence_Injection has no rows. Populate parent tables first, then re-run this script.';
+END
+ELSE
+BEGIN
+
+    ;WITH Tally AS (
+        SELECT 1 AS n
+        UNION ALL
+        SELECT n + 1 FROM Tally WHERE n < 200
+    ),
+    InjList AS (
+        SELECT
+            InjectionId,
+            ROW_NUMBER() OVER (ORDER BY InjectionId) AS rn
+        FROM dbo.Sequence_Injection
+    )
+    INSERT INTO dbo.Sequence_Channel
+        (InjectionId, ChannelName, DetectorType, Wavelength, DataRate)
+    SELECT
+        il.InjectionId,
+        'CH-' + RIGHT('000' + CAST(t.n AS VARCHAR(10)), 3)                          AS ChannelName,
+        CASE (t.n % 5)
+            WHEN 0 THEN 'PDA'
+            WHEN 1 THEN 'UV'
+            WHEN 2 THEN 'RI'
+            WHEN 3 THEN 'FLD'
+            ELSE 'MS'
+        END                                                                          AS DetectorType,
+        CAST(190 + (ABS(CHECKSUM(NEWID())) % 4000) / 10.0 AS DECIMAL(6,2))            AS Wavelength,   -- ~190.0 to 590.0
+        CAST(1   + (ABS(CHECKSUM(NEWID())) % 200)  / 10.0 AS DECIMAL(6,2))            AS DataRate      -- ~1.0 to 21.0
+    FROM Tally t
+    JOIN InjList il
+        ON il.rn = ((t.n - 1) % (SELECT COUNT(*) FROM InjList)) + 1
+    OPTION (MAXRECURSION 200);
+
+    PRINT '200 records inserted into dbo.Sequence_Channel.';
+
+END
+GO
+
+-- =========================================================================
+-- VERIFY
+-- =========================================================================
+SELECT COUNT(*) AS TotalChannelRows FROM dbo.Sequence_Channel;
+SELECT TOP 10 * FROM dbo.Sequence_Channel ORDER BY ChannelId DESC;
+GO
